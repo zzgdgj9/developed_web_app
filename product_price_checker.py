@@ -5,9 +5,13 @@ import re
 from openpyxl import load_workbook
 from io import BytesIO
 
-st.title("Excel Matcher — STBALLL ↔ Update Price")
+st.title("Excel Matcher — Update Price")
 
-file_left = st.file_uploader("Upload STBALLL Excel/CSV file", type=["xlsx","xls","csv"])
+st.markdown("""
+Fที่1คือยังไม่update Fที่2 จากรายงาน ข้อ9.1 ชื่อรายงาน42C-R1.RWT คือ update แล้ว)จะต้องเป็น EXCEL สกุล .xlsx
+""")
+
+file_left = st.file_uploader("Upload Excel file", type=["xlsx","xls"])
 file_right = st.file_uploader("Upload Update Price Excel file", type=["xlsx","xls"])
 
 # =========================================================
