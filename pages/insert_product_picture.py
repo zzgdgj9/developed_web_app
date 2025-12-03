@@ -6,7 +6,6 @@ from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from PIL import Image
 import io
-import constant
 
 st.title("Product Image Inserter")
 
