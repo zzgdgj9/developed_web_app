@@ -18,7 +18,6 @@ def insert_resized_image_center(ws, row, img_bytes):
 
     img = Image.open(io.BytesIO(img_bytes))
     w, h = img.size
-    st.write(w, "and", h)
     ratio = min(cell_width/w, cell_height/h)
     img_resized = img.resize((int(w*ratio), int(h*ratio)))
 
@@ -26,7 +25,6 @@ def insert_resized_image_center(ws, row, img_bytes):
     img_resized.save(buffer, format="PNG")
     buffer.seek(0)
     new_img = XLImage(buffer)
-
     ws.add_image(new_img, f"B{row}")
 
     col_px = int(ws.column_dimensions["B"].width * 7 + 5)
