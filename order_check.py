@@ -29,9 +29,10 @@ def main():
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None:
-        rows = get_express_data(express_file)
-        # do something with rows
-        st.write(rows)
+        data, bill_numbers, total = get_express_data(express_file)
+        
+        st.write(data[-1])
+        st.write(bill_numbers)
 
 
 
@@ -39,6 +40,7 @@ def main():
     excel_file = update_user_input_title(excel_file)
     excel_file = get_datetime(excel_file)
     excel_file = get_branch_number_and_version(excel_file)
+    excel_file = update_bill_numbers_and_total_profit(excel_file, bill_numbers, total)
 
     st.download_button(
         label="⬇️ Download Excel File",
@@ -118,14 +120,25 @@ def generate_excel(data_rows):
     # Row 4
     ws.merge_cells("A4:D4")
     ws["A4"] = "Row 4: A-D merged"
-    ws["A4"].alignment = CENTER
 
     ws.merge_cells("E4:G4")
     ws["E4"] = "Row 4: E-G merged"
     ws["E4"].alignment = CENTER
 
+    ws["A5"] = "NO."
+    ws["B5"] = "บาร์โค้ด"
+    ws["C5"] = "ชื่อสินค้า"
+    ws["D5"] = "จำนวน"
+    ws["E5"] = "STOCK"
+    ws["F5"] = "แพ็ค"
+    ws["G5"] = "จัดสินค้า"
+    for row in ws["A5:F5"]:
+        for cell in row:
+            cell.alignment = CENTER
+
+
     # Main body (row 5+)
-    start_row = 5
+    start_row = 6
     for i, row_values in enumerate(data_rows):
         excel_row = start_row + i
         for col_index in range(7):
@@ -300,9 +313,50 @@ def get_express_data(uploaded_file):
         if all(v in (None, "") for v in row_values):
             continue
 
-        data.append(row_values)
+        split_row = row_values[0].split()
+        data.append(split_row)
 
-    return data
+    return treat_express_data(data)
+
+
+def treat_express_data(data):
+    bill_number = ""
+    bill_number_collection = []
+    index = 0
+
+    while (index < len(data) and data[index][0] != "รวมทั้งสิ้น"):
+        if (data[index][0] != bill_number):
+            bill_number = data[index][0]
+            bill_number_collection.append(bill_number)
+            del data[index]
+            index -= 1
+    
+        index += 1
+
+    if (data[index][0] == "รวมทั้งสิ้น"):
+            total = (data[index][-1])
+            data = data[0 : index]
+            del bill_number_collection[-1]
+            return data, bill_number_collection, total  
+
+    print(bill_number_collection)
+    raise ValueError("Cannot find รวมทั้งสิ้น, check the input file.")
+
+
+def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
+    excel_file.seek(0)
+    wb = load_workbook(excel_file)
+    ws = wb.active
+
+    ws["B2"] = bill_numbers[0] + " – " + bill_numbers[-1]
+    ws["E4"] = "จำนวนบิล  " + str(len(bill_numbers)) + "   บิล"
+    ws["A4"] = "รวม             " + total + "  บาท"
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
 
 
 main()
