@@ -4,8 +4,70 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
 from io import BytesIO
 from datetime import datetime
+from collections import OrderedDict
 
 CENTER = Alignment(horizontal="center", vertical="center")
+
+def extract_pack_qty_from_row(row):
+    """
+    Find all cells in the row that contain '.แพ็ค' and
+    sum the numbers before '.แพ็ค'.
+
+    E.g. '55.แพ็ค' -> 55, '8.แพ็ค' -> 8.
+    If nothing found or parse fails, returns 0.
+    """
+    total = 0.0
+    for cell in row:
+        if isinstance(cell, str) and ".แพ็ค" in cell:
+            before = cell.split(".แพ็ค")[0].strip()
+            before = before.replace(",", "")
+            if not before:
+                continue
+            try:
+                total += float(before)
+            except ValueError:
+                continue
+    return total
+
+
+def summarize_by_barcode_and_code(data_rows):
+    """
+    Group rows by (barcode, item_code) = (row[2], row[3])
+    and sum all 'X.แพ็ค' quantities for each group.
+
+    Returns:
+        list of dicts:
+          {
+            'barcode': ...,
+            'item_code': ...,
+            'sum_qty': ...,
+          }
+    """
+    summaries = OrderedDict()  # to keep order of first appearance
+
+    for row in data_rows:
+        if len(row) < 4:
+            continue  # need at least [bill, line, barcode, item_code]
+
+        barcode = row[2]
+        item_code = row[3]
+
+        if barcode is None or item_code is None:
+            continue
+
+        key = (barcode, item_code)
+
+        if key not in summaries:
+            summaries[key] = {
+                "barcode": barcode,
+                "item_code": item_code,
+                "sum_qty": 0.0,
+            }
+
+        qty = extract_pack_qty_from_row(row)
+        summaries[key]["sum_qty"] += qty
+
+    return list(summaries.values())
 
 def main():
     st.title("Excel Generator")
@@ -19,11 +81,6 @@ def main():
              Do not need to refresh the page.
             """)
 
-    data = [
-        ["r1c1", "r1c2", "r1c3", "r1c4", "r1c5", "r1c6", "r1c7"],
-        ["r2c1", "r2c2", "r2c3", "r2c4", "r2c5", "r2c6", "r2c7"],
-    ]
-
     excel_upload_section()
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
@@ -31,8 +88,8 @@ def main():
     if express_file is not None:
         data, bill_numbers, total = get_express_data(express_file)
         
-        st.write(data[-1])
-        st.write(bill_numbers)
+        a = summarize_by_barcode_and_code(data)
+        st.write(a)
 
 
 
@@ -122,8 +179,7 @@ def generate_excel(data_rows):
     ws["A4"] = "Row 4: A-D merged"
 
     ws.merge_cells("E4:G4")
-    ws["E4"] = "Row 4: E-G merged"
-    ws["E4"].alignment = CENTER
+    ws["E4"] = "Row 4: E-G merged"\
 
     ws["A5"] = "NO."
     ws["B5"] = "บาร์โค้ด"
@@ -349,14 +405,13 @@ def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
     ws = wb.active
 
     ws["B2"] = bill_numbers[0] + " – " + bill_numbers[-1]
-    ws["E4"] = "จำนวนบิล  " + str(len(bill_numbers)) + "   บิล"
-    ws["A4"] = "รวม             " + total + "  บาท"
+    ws["E4"] = "จำนวนบิล          " + str(len(bill_numbers)) + "      บิล"
+    ws["A4"] = "รวม                         " + total + "  บาท"
 
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
     return buffer
-
 
 
 main()
