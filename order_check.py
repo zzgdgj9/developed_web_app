@@ -2,6 +2,8 @@ import streamlit as st
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
+from openpyxl.styles import Font
+from openpyxl.styles import PatternFill
 from io import BytesIO
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -36,6 +38,7 @@ def main():
         excel_file = get_branch_number_and_version(excel_file)
         excel_file = update_bill_numbers_and_total_profit(excel_file, bill_numbers, total)
         excel_file = write_main_data(excel_file, express_data, stock_data)
+        excel_file = adjust_excel_col_width(excel_file)
         
         st.subheader("Download the Excel file")
         agree = st.toggle("I confirm I am not a robot")
@@ -61,6 +64,13 @@ def generate_excel():
 
     # Row 2
     ws["A2"] = "บิล:"
+    ws["A2"].font = Font(size=13, bold=True, color="9933FF")
+    ws["A2"].fill = PatternFill(
+        fill_type="solid",
+        start_color="E2EFDA",
+        end_color="E2EFDA",
+    )
+
     ws.merge_cells("B2:D2")
     ws["B2"] = "Row 2: A-D merged"
 
@@ -92,9 +102,10 @@ def generate_excel():
     ws["E5"] = "STOCK"
     ws["F5"] = "แพ็ค"
     ws["G5"] = "จัดสินค้า"
-    for row in ws["A5:F5"]:
+    for row in ws["A5:G5"]:
         for cell in row:
             cell.alignment = CENTER
+            cell.font = Font(size=12, bold=True)
 
     # Main body (row 5+)
     # start_row = 6
@@ -131,7 +142,12 @@ def update_user_input_title(excel_file):
 
     # Always store the latest raw text
     ws["A1"] = st.session_state.get("user_title", "")
-
+    ws["A1"].font = Font(size=32, color="6600CC")
+    ws["A1"].fill = PatternFill(
+        fill_type="solid",
+        start_color="FFAAFF",
+        end_color="FFAAFF",
+    )
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -160,24 +176,27 @@ def get_datetime(excel_file):
     if "time" not in st.session_state:
         st.session_state["time"] = now.strftime("%H:%M")   # e.g. 14:32:05
 
-    # These inputs are live and bound to session_state
-    # st.text_input(
-    #     "Date (YYYY-MM-DD)",
-    #     key="date",
-    # )
-
-    # st.text_input(
-    #     "Time (HH:MM)",
-    #     key="time",
-    # )
     date_val = st.date_input("Date", value=now.date(), key="date_input")
     time_val = st.time_input("Time", value=now.time(), key="time_input", step=300)
 
     st.session_state["date"] = date_val.strftime("%Y-%m-%d")
     st.session_state["time"] = time_val.strftime("%H:%M")
 
-    ws["F2"] = "วันที่  " + st.session_state["date"]
     ws["E2"] = st.session_state["time"]
+    ws["E2"].font = Font(size=14, color="000000")
+    ws["E2"].fill = PatternFill(
+        fill_type="solid",
+        start_color="FFC000",
+        end_color="FFC000",
+    )
+
+    ws["F2"] = "วันที่   " + st.session_state["date"]
+    ws["F2"].font = Font(size=16, color="FF0000")
+    ws["F2"].fill = PatternFill(
+        fill_type="solid",
+        start_color="FCE4D6",
+        end_color="FCE4D6",
+    )
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -207,8 +226,22 @@ def get_branch_number_and_version(excel_file):
         placeholder="Enter the version number here",
     )
 
-    ws["A3"] = "เขต  " + st.session_state["branch_number"]
+    ws["A3"] = "เขต:  " + st.session_state["branch_number"]
+    ws["A3"].font = Font(size=18, color="CC00FF")
+    ws["A3"].fill = PatternFill(
+        fill_type="solid",
+        start_color="FFCCFF",
+        end_color="FFCCFF",
+    )
+
     ws["F3"] = st.session_state["version"]
+    ws["F3"].font = Font(size=21, bold=True, color="0000FF")
+    ws["F3"].fill = PatternFill(
+        fill_type="solid",
+        start_color="97DCFF",
+        end_color="97DCFF",
+    )
+    #97DCFF
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -221,8 +254,28 @@ def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
     ws = wb.active
 
     ws["B2"] = bill_numbers[0] + " – " + bill_numbers[-1]
-    ws["E4"] = "จำนวนบิล          " + str(len(bill_numbers)) + "      บิล"
-    ws["A4"] = "รวม                         " + total + "  บาท"
+    ws["B2"].font = Font(size=21, color="0000FF")
+    ws["B2"].fill = PatternFill(
+        fill_type="solid",
+        start_color="E2EFDA",
+        end_color="E2EFDA",
+    )
+
+    ws["A4"] = "รวม                                     " + total + "   บาท"
+    ws["A4"].font = Font(size=16, color="0066FF")
+    ws["A4"].fill = PatternFill(
+        fill_type="solid",
+        start_color="CCCCFF",
+        end_color="CCCCFF",
+    )
+
+    ws["E4"] = "จำนวนบิล         " + str(len(bill_numbers)) + "    บิล"
+    ws["E4"].font = Font(size=13, color="FF0066")
+    ws["E4"].fill = PatternFill(
+        fill_type="solid",
+        start_color="E2EFDA",
+        end_color="E2EFDA",
+    )
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -243,6 +296,7 @@ def write_main_data(excel_file, express_data, stock_data):
         cell = ws[f"A{excel_row}"]
         cell.value = number
         cell.alignment = CENTER
+        cell.font = Font(size=12)
 
         fields = ["barcode", "item_code", "sum_qty"]
         for col, key in enumerate(fields, start=2):
@@ -250,16 +304,54 @@ def write_main_data(excel_file, express_data, stock_data):
             cell = ws[f"{col_letter}{excel_row}"]
             cell.value = item[key]
             cell.alignment = CENTER
+            cell.font = Font(size=12)
 
-        got = False
         for search in range (0, end):
             if (int(item["barcode"]) == stock_data[search][0]):
                 cell = ws[f"E{excel_row}"]
                 cell.value = stock_data[search][1]
                 cell.alignment = CENTER
-                got = True
+                cell.font = Font(size=12)
                 del stock_data[search]
                 break
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+def adjust_excel_col_width(excel_file):
+    excel_file.seek(0)
+    wb = load_workbook(excel_file)
+    ws = wb.active
+
+    # Choose the row and column want to autosize
+    min_col = 1
+    max_col = ws.max_column
+    min_row = 5
+    max_row = ws.max_row
+
+    for col in range(min_col, max_col + 1):
+        col_letter = get_column_letter(col)
+        max_len = 0
+
+        for row in range(min_row, max_row + 1):
+            value = ws.cell(row=row, column=col).value
+            if value is None:
+                continue
+
+            # Convert to string for measuring
+            text = str(value)
+
+            # Optional: ignore very long multi-line values
+            text = text.split("\n")[0]
+
+            if len(text) > max_len:
+                max_len = len(text)
+
+        # Add padding, and cap width so it doesn't get crazy wide
+        padding = 6 if col != 1 else 3
+        ws.column_dimensions[col_letter].width = min(max_len + padding, 60)
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -372,6 +464,25 @@ def treat_express_data(data):
     bill_number = ""
     bill_number_collection = []
     index = 0
+
+    for row in data:
+        if len(row) < 3:
+            continue
+
+        third = str(row[2]).strip()
+
+        # already good
+        if third.isdigit():
+            continue
+
+        # try to repair "1234.SOMETHING" => ["1234", "SOMETHING"]
+        if "." in third:
+            left, _, right = third.partition(".")
+
+            # only split if left is digits AND right looks like a real next-field (not just decimals)
+            if left.isdigit() and right and not right.isdigit():
+                row[2] = left
+                row.insert(3, right)  # shift the rest to the right
 
     while (index < len(data) and data[index][0] != "รวมทั้งสิ้น"):
         if (data[index][0] != bill_number):
