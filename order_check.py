@@ -36,12 +36,15 @@ def main():
         excel_file = get_branch_number_and_version(excel_file)
         excel_file = update_bill_numbers_and_total_profit(excel_file, bill_numbers, total)
         excel_file = write_main_data(excel_file, express_data, stock_data)
-
+        
+        st.subheader("Download the Excel file")
+        agree = st.toggle("I confirm I am not a robot")
         st.download_button(
             label="⬇️ Download Excel File",
             data=excel_file,
             file_name="output.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            disabled = not agree
         )
 
 # --- Excel generation helper functions ---
