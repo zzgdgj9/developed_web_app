@@ -269,7 +269,7 @@ def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
         end_color="E2EFDA",
     )
 
-    ws["A4"] = "รวม                                     " + total + "   บาท"
+    ws["A4"] = "รวม                                         " + total + "   บาท"
     ws["A4"].font = Font(size=16, color="0066FF")
     ws["A4"].fill = PatternFill(
         fill_type="solid",
@@ -306,20 +306,23 @@ def write_main_data(excel_file, express_data, stock_data):
         cell.alignment = CENTER
         cell.font = Font(size=12)
 
-        fields = ["barcode", "item_code", "sum_qty"]
-        for col, key in enumerate(fields, start=2):
-            col_letter = get_column_letter(col)
-            cell = ws[f"{col_letter}{excel_row}"]
-            cell.value = str(item[key])
-            cell.alignment = CENTER
-            cell.font = Font(size=12)
+        ws[f"B{excel_row}"].value = item["barcode"]
+        ws[f"B{excel_row}"].alignment = CENTER
+        ws[f"B{excel_row}"].font = Font(size=12)
+
+        ws[f"D{excel_row}"].value = item["sum_qty"]
+        ws[f"D{excel_row}"].alignment = CENTER
+        ws[f"D{excel_row}"].font = Font(size=12)
 
         for search in range (0, end):
             if (int(item["barcode"]) == stock_data[search][0]):
-                cell = ws[f"E{excel_row}"]
-                cell.value = stock_data[search][1]
-                cell.alignment = CENTER
-                cell.font = Font(size=12)
+                ws[f"C{excel_row}"].value = stock_data[search][1]
+                ws[f"C{excel_row}"].alignment = CENTER
+                ws[f"C{excel_row}"].font = Font(size=12)
+                
+                ws[f"E{excel_row}"].value = stock_data[search][2]
+                ws[f"E{excel_row}"].alignment = CENTER
+                ws[f"E{excel_row}"].font = Font(size=12)
                 del stock_data[search]
                 break
 
@@ -552,22 +555,17 @@ def summarize_by_barcode_and_code(data_rows):
             continue  # need at least [bill, line, barcode, item_code]
 
         barcode = row[2]
-        item_code = row[3]
-
-        if barcode is None or item_code is None:
+        if barcode is None:
             continue
 
-        key = (barcode, item_code)
-
-        if key not in summaries:
-            summaries[key] = {
+        if barcode not in summaries:
+            summaries[barcode] = {
                 "barcode": barcode,
-                "item_code": item_code,
                 "sum_qty": 0.0,
             }
 
         qty = extract_pack_qty_from_row(row)
-        summaries[key]["sum_qty"] += qty
+        summaries[barcode]["sum_qty"] += qty
 
     return list(summaries.values())
 
@@ -595,7 +593,7 @@ def get_stock_data(uploaded_file):
     for r in range (2, max_row+1):
         row_value = [
             ws.cell(row=r, column=c).value
-            for c in [2, 6]
+            for c in [2, 3, 6]
         ]
 
         # Optionally skip completely empty rows
