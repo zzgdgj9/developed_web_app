@@ -8,67 +8,6 @@ from collections import OrderedDict
 
 CENTER = Alignment(horizontal="center", vertical="center")
 
-def extract_pack_qty_from_row(row):
-    """
-    Find all cells in the row that contain '.แพ็ค' and
-    sum the numbers before '.แพ็ค'.
-
-    E.g. '55.แพ็ค' -> 55, '8.แพ็ค' -> 8.
-    If nothing found or parse fails, returns 0.
-    """
-    total = 0.0
-    for cell in row:
-        if isinstance(cell, str) and ".แพ็ค" in cell:
-            before = cell.split(".แพ็ค")[0].strip()
-            before = before.replace(",", "")
-            if not before:
-                continue
-            try:
-                total += float(before)
-            except ValueError:
-                continue
-    return total
-
-
-def summarize_by_barcode_and_code(data_rows):
-    """
-    Group rows by (barcode, item_code) = (row[2], row[3])
-    and sum all 'X.แพ็ค' quantities for each group.
-
-    Returns:
-        list of dicts:
-          {
-            'barcode': ...,
-            'item_code': ...,
-            'sum_qty': ...,
-          }
-    """
-    summaries = OrderedDict()  # to keep order of first appearance
-
-    for row in data_rows:
-        if len(row) < 4:
-            continue  # need at least [bill, line, barcode, item_code]
-
-        barcode = row[2]
-        item_code = row[3]
-
-        if barcode is None or item_code is None:
-            continue
-
-        key = (barcode, item_code)
-
-        if key not in summaries:
-            summaries[key] = {
-                "barcode": barcode,
-                "item_code": item_code,
-                "sum_qty": 0.0,
-            }
-
-        qty = extract_pack_qty_from_row(row)
-        summaries[key]["sum_qty"] += qty
-
-    return list(summaries.values())
-
 def main():
     st.title("Excel Generator")
     st.write("""
@@ -86,14 +25,15 @@ def main():
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None:
-        data, bill_numbers, total = get_express_data(express_file)
-        
-        a = summarize_by_barcode_and_code(data)
+        express_data, bill_numbers, total = get_express_data(express_file)
+        express_data = summarize_by_barcode_and_code(express_data)
         st.write(a)
 
+    if stock_file is not None:
+        stock_data = get_stock_data(stock_file)
+        st.write(stock_data)
 
-
-    excel_file = generate_excel(data)
+    excel_file = generate_excel(express_data)
     excel_file = update_user_input_title(excel_file)
     excel_file = get_datetime(excel_file)
     excel_file = get_branch_number_and_version(excel_file)
@@ -106,44 +46,7 @@ def main():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-
-def excel_upload_section():
-    """
-    Show an interface that lets the user upload two Excel files.
-    The uploaded files are stored in:
-        st.session_state["excel_file_1"]
-        st.session_state["excel_file_2"]
-    so you can use them later in your code.
-    """
-
-    st.subheader("Upload Excel Files")
-
-    file1 = st.file_uploader(
-        "Upload the Excel file from Express Accounting.",
-        type=["xlsx", "xlsm", "xls"],
-        key="excel_upload_1",
-    )
-
-    file2 = st.file_uploader(
-        "Upload the product stock file",
-        type=["xlsx", "xlsm", "xls"],
-        key="excel_upload_2",
-    )
-
-    # Store them in session_state so other blocks can use them
-    if file1 is not None:
-        st.session_state["excel_file_1"] = file1
-
-    if file2 is not None:
-        st.session_state["excel_file_2"] = file2
-
-    # (Optional) small status display
-    if "excel_file_1" in st.session_state:
-        st.write("✅ First file uploaded:", st.session_state["excel_file_1"].name)
-
-    if "excel_file_2" in st.session_state:
-        st.write("✅ Second file uploaded:", st.session_state["excel_file_2"].name)
-    
+# --- Excel generation helper functions ---
 
 def generate_excel(data_rows):
     wb = Workbook()
@@ -192,22 +95,20 @@ def generate_excel(data_rows):
         for cell in row:
             cell.alignment = CENTER
 
-
     # Main body (row 5+)
-    start_row = 6
-    for i, row_values in enumerate(data_rows):
-        excel_row = start_row + i
-        for col_index in range(7):
-            col_letter = get_column_letter(col_index + 1)
-            cell = ws[f"{col_letter}{excel_row}"]
-            cell.value = row_values[col_index] if col_index < len(row_values) else ""
-            cell.alignment = CENTER
+    # start_row = 6
+    # for i, row_values in enumerate(data_rows):
+    #     excel_row = start_row + i
+    #     for col_index in range(7):
+    #         col_letter = get_column_letter(col_index + 1)
+    #         cell = ws[f"{col_letter}{excel_row}"]
+    #         cell.value = row_values[col_index] if col_index < len(row_values) else ""
+    #         cell.alignment = CENTER
 
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
     return buffer
-
 
 def update_user_input_title(excel_file):
     """
@@ -235,7 +136,6 @@ def update_user_input_title(excel_file):
     wb.save(buffer)
     buffer.seek(0)
     return buffer
-
 
 def get_datetime(excel_file):
     """
@@ -278,7 +178,6 @@ def get_datetime(excel_file):
     buffer.seek(0)
     return buffer
 
-
 def get_branch_number_and_version(excel_file):
     """
     Get the branch number and the version of the file 
@@ -310,6 +209,58 @@ def get_branch_number_and_version(excel_file):
     buffer.seek(0)
     return buffer
 
+def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
+    excel_file.seek(0)
+    wb = load_workbook(excel_file)
+    ws = wb.active
+
+    ws["B2"] = bill_numbers[0] + " – " + bill_numbers[-1]
+    ws["E4"] = "จำนวนบิล          " + str(len(bill_numbers)) + "      บิล"
+    ws["A4"] = "รวม                         " + total + "  บาท"
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# --- Data obtain & analysis helper functions
+
+def excel_upload_section():
+    """
+    Show an interface that lets the user upload two Excel files.
+    The uploaded files are stored in:
+        st.session_state["excel_file_1"]
+        st.session_state["excel_file_2"]
+    so you can use them later in your code.
+    """
+
+    st.subheader("Upload Excel Files")
+
+    file1 = st.file_uploader(
+        "Upload the Excel file from Express Accounting.",
+        type=["xlsx", "xlsm", "xls"],
+        key="excel_upload_1",
+    )
+
+    file2 = st.file_uploader(
+        "Upload the product stock file",
+        type=["xlsx", "xlsm", "xls"],
+        key="excel_upload_2",
+    )
+
+    # Store them in session_state so other blocks can use them
+    if file1 is not None:
+        st.session_state["excel_file_1"] = file1
+
+    if file2 is not None:
+        st.session_state["excel_file_2"] = file2
+
+    # # (Optional) small status display
+    # if "excel_file_1" in st.session_state:
+    #     st.write("✅ First file uploaded:", st.session_state["excel_file_1"].name)
+
+    # if "excel_file_2" in st.session_state:
+    #     st.write("✅ Second file uploaded:", st.session_state["excel_file_2"].name)
 
 def get_express_data(uploaded_file):
     """
@@ -374,7 +325,6 @@ def get_express_data(uploaded_file):
 
     return treat_express_data(data)
 
-
 def treat_express_data(data):
     bill_number = ""
     bill_number_collection = []
@@ -398,20 +348,107 @@ def treat_express_data(data):
     print(bill_number_collection)
     raise ValueError("Cannot find รวมทั้งสิ้น, check the input file.")
 
+def extract_pack_qty_from_row(row):
+    """
+    Find all cells in the row that contain '.แพ็ค' and
+    sum the numbers before '.แพ็ค'.
 
-def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
-    excel_file.seek(0)
-    wb = load_workbook(excel_file)
-    ws = wb.active
+    E.g. '55.แพ็ค' -> 55, '8.แพ็ค' -> 8.
+    If nothing found or parse fails, returns 0.
+    """
+    total = 0.0
+    for cell in row:
+        if isinstance(cell, str) and ".แพ็ค" in cell:
+            before = cell.split(".แพ็ค")[0].strip()
+            before = before.replace(",", "")
+            if not before:
+                continue
+            try:
+                total += float(before)
+            except ValueError:
+                continue
+    return total
 
-    ws["B2"] = bill_numbers[0] + " – " + bill_numbers[-1]
-    ws["E4"] = "จำนวนบิล          " + str(len(bill_numbers)) + "      บิล"
-    ws["A4"] = "รวม                         " + total + "  บาท"
+def summarize_by_barcode_and_code(data_rows):
+    """
+    Group rows by (barcode, item_code) = (row[2], row[3])
+    and sum all 'X.แพ็ค' quantities for each group.
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    Returns:
+        list of dicts:
+          {
+            'barcode': ...,
+            'item_code': ...,
+            'sum_qty': ...,
+          }
+    """
+    summaries = OrderedDict()  # to keep order of first appearance
 
+    for row in data_rows:
+        if len(row) < 4:
+            continue  # need at least [bill, line, barcode, item_code]
+
+        barcode = row[2]
+        item_code = row[3]
+
+        if barcode is None or item_code is None:
+            continue
+
+        key = (barcode, item_code)
+
+        if key not in summaries:
+            summaries[key] = {
+                "barcode": barcode,
+                "item_code": item_code,
+                "sum_qty": 0.0,
+            }
+
+        qty = extract_pack_qty_from_row(row)
+        summaries[key]["sum_qty"] += qty
+
+    return list(summaries.values())
+
+def get_stock_data(uploaded_file):
+    """
+    Given the uploaded stock Excel file, search the barcode that listed before through the file.
+    (which is appear at the second column in the stock file)
+    and return all rows of barcode with the stock number (stored in the sixth column)
+
+    Returns:
+        List: a list of the stock in the order of barcode searching order.
+    """
+    # Make sure we're at the start of the file
+    try:
+        uploaded_file.seek(0)
+    except Exception:
+        # Some file-like objects may not have seek; ignore if so
+        pass
+
+    wb = load_workbook(uploaded_file, data_only=True)
+    ws = wb.active  # or wb["SheetName"] if you want a specific sheet
+    max_row = ws.max_row
+    print(max_row)
+    max_col = ws.max_column
+
+    data = []
+    for r in range (1, max_row+1):
+        row_value = [
+            ws.cell(row=r, column=c).value
+            for c in [2, 3, 6]
+        ]
+
+        # Optionally skip completely empty rows
+        if all(v in (None, "") for v in row_value):
+            continue
+
+        if not (
+        isinstance(row_value[0], (int, float)) or
+        (isinstance(row_value[0], str) and row_value[0].strip().isdigit())
+        ):
+            continue
+
+        data.append(row_value)
+
+    return data
 
 main()
