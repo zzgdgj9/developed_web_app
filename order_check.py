@@ -4,6 +4,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
 from io import BytesIO
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from collections import OrderedDict
 
 CENTER = Alignment(horizontal="center", vertical="center")
@@ -24,31 +25,28 @@ def main():
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
 
-    if express_file is not None:
+    if express_file is not None and stock_file is not None:
         express_data, bill_numbers, total = get_express_data(express_file)
         express_data = summarize_by_barcode_and_code(express_data)
-        st.write(a)
-
-    if stock_file is not None:
         stock_data = get_stock_data(stock_file)
-        st.write(stock_data)
 
-    excel_file = generate_excel(express_data)
-    excel_file = update_user_input_title(excel_file)
-    excel_file = get_datetime(excel_file)
-    excel_file = get_branch_number_and_version(excel_file)
-    excel_file = update_bill_numbers_and_total_profit(excel_file, bill_numbers, total)
+        excel_file = generate_excel()
+        excel_file = update_user_input_title(excel_file)
+        excel_file = get_datetime(excel_file)
+        excel_file = get_branch_number_and_version(excel_file)
+        excel_file = update_bill_numbers_and_total_profit(excel_file, bill_numbers, total)
+        excel_file = write_main_data(excel_file, express_data, stock_data)
 
-    st.download_button(
-        label="⬇️ Download Excel File",
-        data=excel_file,
-        file_name="example_layout.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+        st.download_button(
+            label="⬇️ Download Excel File",
+            data=excel_file,
+            file_name="output.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
 # --- Excel generation helper functions ---
 
-def generate_excel(data_rows):
+def generate_excel():
     wb = Workbook()
     ws = wb.active
     ws.title = "Sheet1"
@@ -151,24 +149,29 @@ def get_datetime(excel_file):
     wb = load_workbook(excel_file)
     ws = wb.active
 
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("Asia/Bangkok"))
 
     # Set defaults only once (so user edits are not overwritten on rerun)
     if "date" not in st.session_state:
         st.session_state["date"] = now.strftime("%Y-%m-%d")   # e.g. 2026-01-07
     if "time" not in st.session_state:
-        st.session_state["time"] = now.strftime("%H:%M:%S")   # e.g. 14:32:05
+        st.session_state["time"] = now.strftime("%H:%M")   # e.g. 14:32:05
 
     # These inputs are live and bound to session_state
-    st.text_input(
-        "Date (YYYY-MM-DD)",
-        key="date",
-    )
+    # st.text_input(
+    #     "Date (YYYY-MM-DD)",
+    #     key="date",
+    # )
 
-    st.text_input(
-        "Time (HH:MM:SS)",
-        key="time",
-    )
+    # st.text_input(
+    #     "Time (HH:MM)",
+    #     key="time",
+    # )
+    date_val = st.date_input("Date", value=now.date(), key="date_input")
+    time_val = st.time_input("Time", value=now.time(), key="time_input", step=300)
+
+    st.session_state["date"] = date_val.strftime("%Y-%m-%d")
+    st.session_state["time"] = time_val.strftime("%H:%M")
 
     ws["F2"] = "วันที่  " + st.session_state["date"]
     ws["E2"] = st.session_state["time"]
@@ -217,6 +220,43 @@ def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
     ws["B2"] = bill_numbers[0] + " – " + bill_numbers[-1]
     ws["E4"] = "จำนวนบิล          " + str(len(bill_numbers)) + "      บิล"
     ws["A4"] = "รวม                         " + total + "  บาท"
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+def write_main_data(excel_file, express_data, stock_data):
+    excel_file.seek(0)
+    wb = load_workbook(excel_file)
+    ws = wb.active
+
+    number = 0
+    for row, item in enumerate(express_data):
+        end = len(stock_data)
+        excel_row = row + 6
+        number += 1
+
+        cell = ws[f"A{excel_row}"]
+        cell.value = number
+        cell.alignment = CENTER
+
+        fields = ["barcode", "item_code", "sum_qty"]
+        for col, key in enumerate(fields, start=2):
+            col_letter = get_column_letter(col)
+            cell = ws[f"{col_letter}{excel_row}"]
+            cell.value = item[key]
+            cell.alignment = CENTER
+
+        got = False
+        for search in range (0, end):
+            if (int(item["barcode"]) == stock_data[search][0]):
+                cell = ws[f"E{excel_row}"]
+                cell.value = stock_data[search][1]
+                cell.alignment = CENTER
+                got = True
+                del stock_data[search]
+                break
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -427,26 +467,18 @@ def get_stock_data(uploaded_file):
     wb = load_workbook(uploaded_file, data_only=True)
     ws = wb.active  # or wb["SheetName"] if you want a specific sheet
     max_row = ws.max_row
-    print(max_row)
-    max_col = ws.max_column
 
     data = []
-    for r in range (1, max_row+1):
+    for r in range (2, max_row+1):
         row_value = [
             ws.cell(row=r, column=c).value
-            for c in [2, 3, 6]
+            for c in [2, 6]
         ]
 
         # Optionally skip completely empty rows
         if all(v in (None, "") for v in row_value):
             continue
-
-        if not (
-        isinstance(row_value[0], (int, float)) or
-        (isinstance(row_value[0], str) and row_value[0].strip().isdigit())
-        ):
-            continue
-
+        
         data.append(row_value)
 
     return data
