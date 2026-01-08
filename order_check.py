@@ -4,12 +4,20 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
 from openpyxl.styles import Font
 from openpyxl.styles import PatternFill
+from openpyxl.styles import Border, Side
 from io import BytesIO
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from collections import OrderedDict
 
 CENTER = Alignment(horizontal="center", vertical="center")
+
+BORDER = Border(
+    left=Side(style="thin"),
+    right=Side(style="thin"),
+    top=Side(style="thin"),
+    bottom=Side(style="thin"),
+)
 
 def main():
     st.title("Excel Generator")
@@ -38,7 +46,7 @@ def main():
         excel_file = get_branch_number_and_version(excel_file)
         excel_file = update_bill_numbers_and_total_profit(excel_file, bill_numbers, total)
         excel_file = write_main_data(excel_file, express_data, stock_data)
-        excel_file = adjust_excel_col_width(excel_file)
+        excel_file = adjust_excel_col_width_and_add_border(excel_file)
         
         st.subheader("Download the Excel file")
         agree = st.toggle("I confirm I am not a robot")
@@ -302,7 +310,7 @@ def write_main_data(excel_file, express_data, stock_data):
         for col, key in enumerate(fields, start=2):
             col_letter = get_column_letter(col)
             cell = ws[f"{col_letter}{excel_row}"]
-            cell.value = item[key]
+            cell.value = str(item[key])
             cell.alignment = CENTER
             cell.font = Font(size=12)
 
@@ -320,7 +328,7 @@ def write_main_data(excel_file, express_data, stock_data):
     buffer.seek(0)
     return buffer
 
-def adjust_excel_col_width(excel_file):
+def adjust_excel_col_width_and_add_border(excel_file):
     excel_file.seek(0)
     wb = load_workbook(excel_file)
     ws = wb.active
@@ -337,6 +345,7 @@ def adjust_excel_col_width(excel_file):
 
         for row in range(min_row, max_row + 1):
             value = ws.cell(row=row, column=col).value
+            ws.cell(row=row, column=col).border = BORDER
             if value is None:
                 continue
 
