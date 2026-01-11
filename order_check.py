@@ -278,7 +278,7 @@ def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
     )
 
     ws["E4"] = "จำนวนบิล         " + str(len(bill_numbers)) + "    บิล"
-    ws["E4"].font = Font(size=13, color="FF0066")
+    ws["E4"].font = Font(size=14, color="FF0066")
     ws["E4"].fill = PatternFill(
         fill_type="solid",
         start_color="E2EFDA",
@@ -306,14 +306,31 @@ def write_main_data(excel_file, express_data, stock_data):
         cell.alignment = CENTER
         cell.font = Font(size=12)
 
-        ws[f"B{excel_row}"].value = item["barcode"]
-        ws[f"B{excel_row}"].alignment = CENTER
-        ws[f"B{excel_row}"].font = Font(size=12)
-
         ws[f"D{excel_row}"].value = item["sum_qty"]
         ws[f"D{excel_row}"].alignment = CENTER
         ws[f"D{excel_row}"].font = Font(size=12)
 
+        if "_" in item["barcode"]:
+            before, _, after = item["barcode"].partition("_")
+            ws[f"B{excel_row}"].value = before
+            ws[f"B{excel_row}"].alignment = CENTER
+            ws[f"B{excel_row}"].font = Font(size=12)
+            ws[f"B{excel_row}"].fill = PatternFill(
+                fill_type="solid",
+                start_color="FF4A0B",
+                end_color="FF4A0B",
+            )
+
+            ws[f"C{excel_row}"] = after
+            ws[f"C{excel_row}"].alignment = CENTER
+            ws[f"C{excel_row}"].font = Font(size=12)
+            continue
+
+        ws[f"B{excel_row}"].value = item["barcode"]
+        ws[f"B{excel_row}"].alignment = CENTER
+        ws[f"B{excel_row}"].font = Font(size=12)
+
+        found = False
         for search in range (0, end):
             if (int(item["barcode"]) == stock_data[search][0]):
                 ws[f"C{excel_row}"].value = stock_data[search][1]
@@ -324,7 +341,18 @@ def write_main_data(excel_file, express_data, stock_data):
                 ws[f"E{excel_row}"].alignment = CENTER
                 ws[f"E{excel_row}"].font = Font(size=12)
                 del stock_data[search]
+                found = True
                 break
+
+        if not found:
+            ws[f"C{excel_row}"].value = "Cannot find the barcode.\nUpdate the main sheet of the stock file."
+            ws[f"C{excel_row}"].alignment = CENTER
+            ws[f"C{excel_row}"].font = Font(size=12)
+            ws[f"C{excel_row}"].fill = PatternFill(
+                fill_type="solid",
+                start_color="FF4A0B",
+                end_color="FF4A0B",
+            )
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -495,6 +523,11 @@ def treat_express_data(data):
             if left.isdigit() and right and not right.isdigit():
                 row[2] = left
                 row.insert(3, right)  # shift the rest to the right
+                continue
+
+        if not third.isdigit():
+            row[2] = "0000000000000_"+ third
+            row.insert(3, third)
 
     while (index < len(data) and data[index][0] != "รวมทั้งสิ้น"):
         if (data[index][0] != bill_number):
@@ -586,7 +619,7 @@ def get_stock_data(uploaded_file):
         pass
 
     wb = load_workbook(uploaded_file, data_only=True)
-    ws = wb.active  # or wb["SheetName"] if you want a specific sheet
+    ws = wb.worksheets[0]  # or wb["SheetName"] if you want a specific sheet
     max_row = ws.max_row
 
     data = []
