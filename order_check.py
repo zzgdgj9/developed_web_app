@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
@@ -37,7 +38,7 @@ def main():
 
     if express_file is not None and stock_file is not None:
         express_data, bill_numbers, total = get_express_data(express_file)
-        express_data = summarize_by_barcode_and_code(express_data)
+        express_data = summarize_by_barcode(express_data)
         stock_data = get_stock_data(stock_file)
 
         excel_file = generate_excel()
@@ -187,7 +188,7 @@ def get_datetime(excel_file):
     date_val = st.date_input("Date", value=now.date(), key="date_input")
     time_val = st.time_input("Time", value=now.time(), key="time_input", step=300)
 
-    st.session_state["date"] = date_val.strftime("%Y-%m-%d")
+    st.session_state["date"] = date_val.strftime("%d/%m/") + str(date_val.year + 543)
     st.session_state["time"] = time_val.strftime("%H:%M")
 
     ws["E2"] = st.session_state["time"]
@@ -530,8 +531,16 @@ def treat_express_data(data):
             row.insert(3, third)
 
     while (index < len(data) and data[index][0] != "รวมทั้งสิ้น"):
-        if (data[index][0] != bill_number):
-            bill_number = data[index][0]
+        if len(data[index]) < 5:
+            index += 1
+            continue
+        
+        checking_bill = data[index][0]
+        checking_bill = re.sub(r'[^A-Za-z0-9]', '', checking_bill)
+
+
+        if (checking_bill != bill_number):
+            bill_number = checking_bill
             bill_number_collection.append(bill_number)
             del data[index]
             index -= 1
@@ -541,10 +550,8 @@ def treat_express_data(data):
     if (data[index][0] == "รวมทั้งสิ้น"):
             total = (data[index][-1])
             data = data[0 : index]
-            del bill_number_collection[-1]
             return data, bill_number_collection, total  
 
-    print(bill_number_collection)
     raise ValueError("Cannot find รวมทั้งสิ้น, check the input file.")
 
 def extract_pack_qty_from_row(row):
@@ -568,7 +575,7 @@ def extract_pack_qty_from_row(row):
                 continue
     return total
 
-def summarize_by_barcode_and_code(data_rows):
+def summarize_by_barcode(data_rows):
     """
     Group rows by (barcode, item_code) = (row[2], row[3])
     and sum all 'X.แพ็ค' quantities for each group.
