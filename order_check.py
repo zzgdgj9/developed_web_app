@@ -32,22 +32,50 @@ def main():
              Do not need to refresh the page.
             """)
 
-    excel_upload_section()
+    def banana():
+        st.success("🍌 Banana function called")
+        st.write("This is banana logic")
+
+    def peach():
+        st.success("🍑 Peach function called")
+        st.write("This is peach logic")
+
+    st.subheader("กรุณาเลือกลูกค้า")
+    choice = st.radio(
+        "กรุณาเลือกลูกค้า",
+        ["ร้านย่อย", "GBH", "DH", "HP"],
+        index=None,  # nothing selected initially
+        label_visibility="collapsed"
+    )
+
+    if choice == "ร้านย่อย":
+        ThaiName()
+    elif choice == "GBH":
+        banana()
+    elif choice == "DH":
+        peach()
+    elif choice == "HP":
+        banana()
+
+# --- Entrance function for different companies with specific programme logic ---
+
+def ThaiName():
+    ExcelUploadSection()
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None and stock_file is not None:
-        express_data, bill_numbers, total = get_express_data(express_file)
-        express_data = summarize_by_barcode(express_data)
-        stock_data = get_stock_data(stock_file)
+        express_data, bill_numbers, total = GetExpressData(express_file)
+        express_data = SummariseByBarcode(express_data)
+        stock_data = GetStockData(stock_file)
 
-        excel_file = generate_excel()
-        excel_file = update_user_input_title(excel_file)
-        excel_file = get_datetime(excel_file)
-        excel_file = get_branch_number_and_version(excel_file)
-        excel_file = update_bill_numbers_and_total_profit(excel_file, bill_numbers, total)
-        excel_file = write_main_data(excel_file, express_data, stock_data)
-        excel_file = adjust_excel_col_width_and_add_border(excel_file)
+        excel_file = GenerateExcel()
+        excel_file = UpdateUserInputTitle(excel_file)
+        excel_file = GetDateTime(excel_file)
+        excel_file = GetBranchNumberAndVersion(excel_file)
+        excel_file = UpdateBillNumberAndTotalProfit(excel_file, bill_numbers, total)
+        excel_file = WriteMainData(excel_file, express_data, stock_data)
+        excel_file = AdjustExcelColWidthAndAddBorder(excel_file)
         
         st.subheader("Download the Excel file")
         agree = st.toggle("I confirm I am not a robot")
@@ -59,9 +87,18 @@ def main():
             disabled = not agree
         )
 
+def GBH():
+    st.write("GBH")
+
+def DH():
+    st.write("DH")
+
+def HP():
+    st.write("HP") 
+
 # --- Excel generation helper functions ---
 
-def generate_excel():
+def GenerateExcel():
     wb = Workbook()
     ws = wb.active
     ws.title = "Sheet1"
@@ -131,7 +168,7 @@ def generate_excel():
     buffer.seek(0)
     return buffer
 
-def update_user_input_title(excel_file):
+def UpdateUserInputTitle(excel_file):
     """
     Shows a text box. Whatever the user types is stored automatically
     (no save button) and returned exactly as entered.
@@ -163,7 +200,7 @@ def update_user_input_title(excel_file):
     buffer.seek(0)
     return buffer
 
-def get_datetime(excel_file):
+def GetDateTime(excel_file):
     """
     Show date & time inputs for the Excel file.
     - Defaults to current date & time on first run
@@ -212,7 +249,7 @@ def get_datetime(excel_file):
     buffer.seek(0)
     return buffer
 
-def get_branch_number_and_version(excel_file):
+def GetBranchNumberAndVersion(excel_file):
     """
     Get the branch number and the version of the file 
     from user input and put in the excel
@@ -257,7 +294,7 @@ def get_branch_number_and_version(excel_file):
     buffer.seek(0)
     return buffer
 
-def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
+def UpdateBillNumberAndTotalProfit(excel_file, bill_numbers, total):
     excel_file.seek(0)
     wb = load_workbook(excel_file)
     ws = wb.active
@@ -291,7 +328,7 @@ def update_bill_numbers_and_total_profit(excel_file, bill_numbers, total):
     buffer.seek(0)
     return buffer
 
-def write_main_data(excel_file, express_data, stock_data):
+def WriteMainData(excel_file, express_data, stock_data):
     excel_file.seek(0)
     wb = load_workbook(excel_file)
     ws = wb.active
@@ -333,17 +370,21 @@ def write_main_data(excel_file, express_data, stock_data):
 
         found = False
         for search in range (0, end):
-            if (int(item["barcode"]) == stock_data[search][0]):
-                ws[f"C{excel_row}"].value = stock_data[search][1]
-                ws[f"C{excel_row}"].alignment = CENTER
-                ws[f"C{excel_row}"].font = Font(size=12)
-                
-                ws[f"E{excel_row}"].value = stock_data[search][2]
-                ws[f"E{excel_row}"].alignment = CENTER
-                ws[f"E{excel_row}"].font = Font(size=12)
-                del stock_data[search]
-                found = True
-                break
+            barcode_bill = SafeInt(item.get("barcode"))
+            barcode_stock = SafeInt(stock_data[search][0])
+
+            if barcode_bill is not None and barcode_stock is not None:
+                if (barcode_bill == barcode_stock):
+                    ws[f"C{excel_row}"].value = stock_data[search][1]
+                    ws[f"C{excel_row}"].alignment = CENTER
+                    ws[f"C{excel_row}"].font = Font(size=12)
+                    
+                    ws[f"E{excel_row}"].value = stock_data[search][2]
+                    ws[f"E{excel_row}"].alignment = CENTER
+                    ws[f"E{excel_row}"].font = Font(size=12)
+                    del stock_data[search]
+                    found = True
+                    break
 
         if not found:
             ws[f"C{excel_row}"].value = "Cannot find the barcode.\nUpdate the main sheet of the stock file."
@@ -360,7 +401,7 @@ def write_main_data(excel_file, express_data, stock_data):
     buffer.seek(0)
     return buffer
 
-def adjust_excel_col_width_and_add_border(excel_file):
+def AdjustExcelColWidthAndAddBorder(excel_file):
     excel_file.seek(0)
     wb = load_workbook(excel_file)
     ws = wb.active
@@ -401,7 +442,7 @@ def adjust_excel_col_width_and_add_border(excel_file):
 
 # --- Data obtain & analysis helper functions
 
-def excel_upload_section():
+def ExcelUploadSection():
     """
     Show an interface that lets the user upload two Excel files.
     The uploaded files are stored in:
@@ -438,7 +479,7 @@ def excel_upload_section():
     # if "excel_file_2" in st.session_state:
     #     st.write("✅ Second file uploaded:", st.session_state["excel_file_2"].name)
 
-def get_express_data(uploaded_file):
+def GetExpressData(uploaded_file):
     """
     Given an uploaded Excel file, find the SECOND 'horizontal line' row
     (a row where any cell contains only '-' characters like '--------')
@@ -499,9 +540,9 @@ def get_express_data(uploaded_file):
         split_row = row_values[0].split()
         data.append(split_row)
 
-    return treat_express_data(data)
+    return TreatExpressData(data)
 
-def treat_express_data(data):
+def TreatExpressData(data):
     bill_number = ""
     bill_number_collection = []
     index = 0
@@ -532,12 +573,11 @@ def treat_express_data(data):
 
     while (index < len(data) and data[index][0] != "รวมทั้งสิ้น"):
         if len(data[index]) < 5:
-            index += 1
+            del data[index]
             continue
         
         checking_bill = data[index][0]
         checking_bill = re.sub(r'[^A-Za-z0-9]', '', checking_bill)
-
 
         if (checking_bill != bill_number):
             bill_number = checking_bill
@@ -554,7 +594,7 @@ def treat_express_data(data):
 
     raise ValueError("Cannot find รวมทั้งสิ้น, check the input file.")
 
-def extract_pack_qty_from_row(row):
+def ExtractPackQtyFromRow(row):
     """
     Find all cells in the row that contain '.แพ็ค' and
     sum the numbers before '.แพ็ค'.
@@ -562,7 +602,7 @@ def extract_pack_qty_from_row(row):
     E.g. '55.แพ็ค' -> 55, '8.แพ็ค' -> 8.
     If nothing found or parse fails, returns 0.
     """
-    total = 0.0
+    qty = 0.0
     for cell in row:
         if isinstance(cell, str) and ".แพ็ค" in cell:
             before = cell.split(".แพ็ค")[0].strip()
@@ -570,12 +610,12 @@ def extract_pack_qty_from_row(row):
             if not before:
                 continue
             try:
-                total += float(before)
+                qty += float(before)
             except ValueError:
                 continue
-    return total
+    return qty
 
-def summarize_by_barcode(data_rows):
+def SummariseByBarcode(data_rows):
     """
     Group rows by (barcode, item_code) = (row[2], row[3])
     and sum all 'X.แพ็ค' quantities for each group.
@@ -604,12 +644,12 @@ def summarize_by_barcode(data_rows):
                 "sum_qty": 0.0,
             }
 
-        qty = extract_pack_qty_from_row(row)
+        qty = ExtractPackQtyFromRow(row)
         summaries[barcode]["sum_qty"] += qty
 
     return list(summaries.values())
 
-def get_stock_data(uploaded_file):
+def GetStockData(uploaded_file):
     """
     Given the uploaded stock Excel file, search the barcode that listed before through the file.
     (which is appear at the second column in the stock file)
@@ -643,5 +683,13 @@ def get_stock_data(uploaded_file):
         data.append(row_value)
 
     return data
+
+# --- General helper function ---
+
+def SafeInt(x):
+    try:
+        return int(x)
+    except (ValueError, TypeError):
+        return None
 
 main()
