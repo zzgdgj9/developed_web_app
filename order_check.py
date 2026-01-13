@@ -79,10 +79,17 @@ def ThaiName():
         DownloadFile(excel_file)
 
 def GBH():
-    excel_file = GetTemplate("GBH")
+    ExcelUploadSection()
+    express_file = st.session_state.get("excel_file_1")
+    stock_file = st.session_state.get("excel_file_2")
 
-    start_date, end_date = GetUserInputDates()
-    st.write(start_date, end_date)
+    if express_file is not None and stock_file is not None:
+        start_date, end_date = GetUserInputDates()
+        express_data, bill_numbers, total = GetExpressData(express_file)
+
+        excel_file = GetTemplate("GBH")
+        excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
+        DownloadFile(excel_file)
 
 def DH():
     excel_file = GetTemplate("DH")
@@ -427,6 +434,27 @@ def AdjustExcelColWidthAndAddBorder(excel_file):
 
 #endregion
 
+# region --- Excel generation helper functions for other companies ---
+
+def WriteGBHFileInformation(excel_file, start_date, end_date, bill_number, total):
+    wb = load_workbook(excel_file)
+    ws = wb.active
+
+    ws["F2"].value = start_date
+    ws["G2"].value = end_date
+
+    bill_number_range = FindBillNumberRange(bill_number)
+    information = [bill_number_range, str(len(bill_number)), str(total)]
+    for replacement in information:
+        ws["A3"].value = ws["A3"].value.replace("?", replacement, 1)
+
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    return excel_file
+
+#endregion
+
 # region --- Data obtain & analysis helper functions ---
 
 def GetExpressData(uploaded_file):
@@ -543,6 +571,52 @@ def TreatExpressData(data):
             return data, bill_number_collection, total  
 
     raise ValueError("Cannot find รวมทั้งสิ้น, check the input file.")
+
+def FindBillNumberRange(bill_number):
+    """
+    Convert a list of alphanumeric bill numbers into compact string ranges.
+    Continuous numeric parts are compressed with "-", gaps separated by "/".
+    Original prefixes are preserved.
+    """
+    if not bill_number:
+        return ""
+
+    # Step 1: Extract numeric part and keep original ID mapping
+    id_map = []
+    for i in bill_number:
+        num = int(re.sub(r"\D", "", i))  # numeric part
+        id_map.append((num, i))          # tuple (number, original_id)
+
+    # Step 2: Sort by numeric part
+    id_map.sort(key=lambda x: x[0])
+
+    # Step 3: Build ranges
+    ranges = []
+    start_num, start_id = id_map[0]
+    end_num, end_id = start_num, start_id
+
+    for num, original_id in id_map[1:]:
+        if num == end_num + 1:
+            # continuous
+            end_num = num
+            end_id = original_id
+        else:
+            # gap found, save previous range
+            if start_num == end_num:
+                ranges.append(start_id)
+            else:
+                ranges.append(f"{start_id}-{end_id}")
+            start_num, start_id = num, original_id
+            end_num, end_id = num, original_id
+
+    # Add the last range
+    if start_num == end_num:
+        ranges.append(start_id)
+    else:
+        ranges.append(f"{start_id}-{end_id}")
+
+    # Join ranges with /
+    return " / ".join(ranges)
 
 def ExtractPackQtyFromRow(row):
     """
