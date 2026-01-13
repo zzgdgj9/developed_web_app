@@ -59,7 +59,7 @@ def main():
 # region --- Entrance function for different companies with specific programme logic ---
 
 def ThaiName():
-    ExcelUploadSection()
+    ExcelUploadSection("Thai")
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
 
@@ -79,7 +79,7 @@ def ThaiName():
         DownloadFile(excel_file)
 
 def GBH():
-    ExcelUploadSection()
+    ExcelUploadSection("GBH")
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
 
@@ -726,7 +726,7 @@ def GetStockData(uploaded_file):
 
 # region --- General user interface functions ---
 
-def ExcelUploadSection():
+def ExcelUploadSection(choice):
     """
     Show an interface that lets the user upload two Excel files.
     The uploaded files are stored in:
@@ -740,13 +740,13 @@ def ExcelUploadSection():
     file1 = st.file_uploader(
         "Upload the Excel file from Express Accounting.",
         type=["xlsx", "xlsm", "xls"],
-        key="excel_upload_1",
+        key=f"excel_upload_1_{choice}",
     )
 
     file2 = st.file_uploader(
         "Upload the product stock file",
         type=["xlsx", "xlsm", "xls"],
-        key="excel_upload_2",
+        key=f"excel_upload_2_{choice}",
     )
 
     # Store them in session_state so other blocks can use them
