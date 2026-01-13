@@ -2,12 +2,10 @@ import re
 import streamlit as st
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment
-from openpyxl.styles import Font
-from openpyxl.styles import PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.styles import Border, Side
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 from collections import OrderedDict
 
@@ -32,14 +30,6 @@ def main():
              Do not need to refresh the page.
             """)
 
-    def banana():
-        st.success("🍌 Banana function called")
-        st.write("This is banana logic")
-
-    def peach():
-        st.success("🍑 Peach function called")
-        st.write("This is peach logic")
-
     st.subheader("กรุณาเลือกลูกค้า")
     choice = st.radio(
         "กรุณาเลือกลูกค้า",
@@ -48,16 +38,25 @@ def main():
         label_visibility="collapsed"
     )
 
+    if "prev_choice" not in st.session_state:
+        st.session_state.prev_choice = choice
+
+    if choice is not None and choice != st.session_state.prev_choice:
+        st.session_state.clear()
+        st.session_state.prev_choice = choice
+        st.session_state["toggle_button"] = False
+        st.rerun()
+
     if choice == "ร้านย่อย":
         ThaiName()
     elif choice == "GBH":
-        banana()
+        GBH()
     elif choice == "DH":
-        peach()
+        DH()
     elif choice == "HP":
-        banana()
+        HP()
 
-# --- Entrance function for different companies with specific programme logic ---
+# region --- Entrance function for different companies with specific programme logic ---
 
 def ThaiName():
     ExcelUploadSection()
@@ -77,26 +76,25 @@ def ThaiName():
         excel_file = WriteMainData(excel_file, express_data, stock_data)
         excel_file = AdjustExcelColWidthAndAddBorder(excel_file)
         
-        st.subheader("Download the Excel file")
-        agree = st.toggle("I confirm I am not a robot")
-        st.download_button(
-            label="⬇️ Download Excel File",
-            data=excel_file,
-            file_name="output.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            disabled = not agree
-        )
+        DownloadFile(excel_file)
 
 def GBH():
-    st.write("GBH")
+    excel_file = GetTemplate("GBH")
+
+    start_date, end_date = GetUserInputDates()
+    st.write(start_date, end_date)
 
 def DH():
-    st.write("DH")
+    excel_file = GetTemplate("DH")
+    DownloadFile(excel_file)
 
 def HP():
-    st.write("HP") 
+    excel_file = GetTemplate("HP")
+    DownloadFile(excel_file)
 
-# --- Excel generation helper functions ---
+# endregion
+
+# region --- Excel generation helper functions for company in Thai ---
 
 def GenerateExcel():
     wb = Workbook()
@@ -148,20 +146,13 @@ def GenerateExcel():
     ws["E5"] = "STOCK"
     ws["F5"] = "แพ็ค"
     ws["G5"] = "จัดสินค้า"
+
     for row in ws["A5:G5"]:
         for cell in row:
             cell.alignment = CENTER
             cell.font = Font(size=12, bold=True)
 
-    # Main body (row 5+)
-    # start_row = 6
-    # for i, row_values in enumerate(data_rows):
-    #     excel_row = start_row + i
-    #     for col_index in range(7):
-    #         col_letter = get_column_letter(col_index + 1)
-    #         cell = ws[f"{col_letter}{excel_row}"]
-    #         cell.value = row_values[col_index] if col_index < len(row_values) else ""
-    #         cell.alignment = CENTER
+    ws.freeze_panes = "A6"
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -174,17 +165,11 @@ def UpdateUserInputTitle(excel_file):
     (no save button) and returned exactly as entered.
     """
 
-    st.subheader("Title")
-
     excel_file.seek(0)
     wb = load_workbook(excel_file)
     ws = wb.active
 
-    st.text_input(
-        "Enter title:",
-        key = "user_title",
-        placeholder="Enter the title here",
-    )
+    GetUserInputTitle()
 
     # Always store the latest raw text
     ws["A1"] = st.session_state.get("user_title", "")
@@ -440,44 +425,9 @@ def AdjustExcelColWidthAndAddBorder(excel_file):
     buffer.seek(0)
     return buffer
 
-# --- Data obtain & analysis helper functions
+#endregion
 
-def ExcelUploadSection():
-    """
-    Show an interface that lets the user upload two Excel files.
-    The uploaded files are stored in:
-        st.session_state["excel_file_1"]
-        st.session_state["excel_file_2"]
-    so you can use them later in your code.
-    """
-
-    st.subheader("Upload Excel Files")
-
-    file1 = st.file_uploader(
-        "Upload the Excel file from Express Accounting.",
-        type=["xlsx", "xlsm", "xls"],
-        key="excel_upload_1",
-    )
-
-    file2 = st.file_uploader(
-        "Upload the product stock file",
-        type=["xlsx", "xlsm", "xls"],
-        key="excel_upload_2",
-    )
-
-    # Store them in session_state so other blocks can use them
-    if file1 is not None:
-        st.session_state["excel_file_1"] = file1
-
-    if file2 is not None:
-        st.session_state["excel_file_2"] = file2
-
-    # # (Optional) small status display
-    # if "excel_file_1" in st.session_state:
-    #     st.write("✅ First file uploaded:", st.session_state["excel_file_1"].name)
-
-    # if "excel_file_2" in st.session_state:
-    #     st.write("✅ Second file uploaded:", st.session_state["excel_file_2"].name)
+# region --- Data obtain & analysis helper functions ---
 
 def GetExpressData(uploaded_file):
     """
@@ -684,12 +634,137 @@ def GetStockData(uploaded_file):
 
     return data
 
-# --- General helper function ---
+#endregion
 
+# region --- General user interface functions ---
+
+def ExcelUploadSection():
+    """
+    Show an interface that lets the user upload two Excel files.
+    The uploaded files are stored in:
+        st.session_state["excel_file_1"]
+        st.session_state["excel_file_2"]
+    so you can use them later in your code.
+    """
+
+    st.subheader("Upload Excel Files")
+
+    file1 = st.file_uploader(
+        "Upload the Excel file from Express Accounting.",
+        type=["xlsx", "xlsm", "xls"],
+        key="excel_upload_1",
+    )
+
+    file2 = st.file_uploader(
+        "Upload the product stock file",
+        type=["xlsx", "xlsm", "xls"],
+        key="excel_upload_2",
+    )
+
+    # Store them in session_state so other blocks can use them
+    if file1 is not None:
+        st.session_state["excel_file_1"] = file1
+
+    if file2 is not None:
+        st.session_state["excel_file_2"] = file2
+
+def GetUserInputTitle():
+    st.subheader("Title")
+
+    title = st.text_input(
+        "Enter title:",
+        key = "user_title",
+        placeholder="Enter the title here",
+        label_visibility="collapsed"
+    )
+
+    return title
+
+def GetUserInputDates():
+    today = date.today()
+
+    date_range = st.date_input(
+        "Select date range",
+        value = (today, today)
+    )
+
+    if isinstance(date_range, tuple):
+        # If the user fortgot to choice the end date, set the today as end date
+        if len(date_range) == 1:
+            start_date = date_range[0]
+            end_date = today
+        else:
+            start_date, end_date = date_range
+    else:
+        start_date = end_date = date_range
+
+    # Change the returned date format
+    start_date = f"{start_date.strftime('%d.%m')}.{start_date.year + 543}"
+    end_date = f"{end_date.strftime('%d.%m')}.{end_date.year + 543}"
+    return start_date, end_date
+
+def DownloadFile(excel_file):
+    st.subheader("Download the Excel file")
+
+    agree = st.toggle(
+        "I confirm I am not a robot",
+        key="toggle_button",
+        value=False
+    )
+
+    st.download_button(
+        label="⬇️ Download Excel File",
+        data=excel_file,
+        file_name="output.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        disabled = not agree,
+    )
+
+#endregion
+
+# region --- General helper function ---
+   
 def SafeInt(x):
     try:
         return int(x)
     except (ValueError, TypeError):
         return None
+
+def GetTemplate(file_choice):
+    templates = {
+        "GBH": {"path": "template file/GBH.xlsx", "sheets": ["AS", "GL"]},
+        "DH": {"path": "template file/DH.xlsx", "sheets": ["GL", "MR"]},
+        "HP": {"path": "template file/HP.xlsx", "sheets": ["HP"]}
+    }
+
+    if file_choice not in templates:
+        return None
+
+    template = templates[file_choice]
+    wb = load_workbook(template["path"])
+
+    if len(template["sheets"]) == 1:
+        sheet_choice = template["sheets"][0]
+    else:
+        sheet_choice = st.radio(
+            "Select mode",
+            template["sheets"],
+            horizontal=True,
+            key=f"{file_choice}_sheet_choice"
+        )
+
+    if not sheet_choice:
+            return None
+        
+    for ws in wb.worksheets[:]:
+            if ws.title != sheet_choice:
+                wb.remove(ws)
+                
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+# endregion
 
 main()
