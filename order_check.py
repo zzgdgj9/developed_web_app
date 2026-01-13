@@ -566,7 +566,7 @@ def TreatExpressData(data):
         index += 1
 
     if (data[index][0] == "รวมทั้งสิ้น"):
-            total = (data[index][-1])
+            total = (data[index][-3])
             data = data[0 : index]
             return data, bill_number_collection, total  
 
@@ -627,16 +627,30 @@ def ExtractPackQtyFromRow(row):
     If nothing found or parse fails, returns 0.
     """
     qty = 0.0
+    suffixes = (".แพ็ค", ".อัน", ".ชุด")
+    found = False
+
     for cell in row:
-        if isinstance(cell, str) and ".แพ็ค" in cell:
-            before = cell.split(".แพ็ค")[0].strip()
+        if isinstance(cell, str) and any(suffix in cell for suffix in suffixes):
+            found = True
+            # Find the first matching suffix
+            for suffix in suffixes:
+                if suffix in cell:
+                    before = cell.split(suffix)[0].strip()
+                    break
+
             before = before.replace(",", "")
             if not before:
                 continue
+
             try:
                 qty += float(before)
             except ValueError:
                 continue
+
+    if not found:
+        raise ValueError("Self Defined Error 10010: No valid suffix (.แพ็ค, .อัน, .ชุด) found in this row!")  # raise Python exception
+
     return qty
 
 def SummariseByBarcode(data_rows):
