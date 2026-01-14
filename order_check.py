@@ -25,7 +25,7 @@ ERROR_HIGHLIGHT = PatternFill(
 )
 
 def main():
-    st.title("Excel Generator")
+    st.title("Sales & Stock Reconciliation Report Generator")
     st.write("""
              Upload the requriment files to the corresponding box and 
              provide the information to generate the summary excel sheet.
@@ -41,6 +41,7 @@ def main():
         "กรุณาเลือกลูกค้า",
         ["ร้านย่อย", "GBH", "DH", "HP"],
         index=None,  # nothing selected initially
+        horizontal=True,
         label_visibility="collapsed"
     )
 
@@ -93,11 +94,12 @@ def GBH():
         start_date, end_date = GetUserInputDates()
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file, 0)
+        stock_data = GetStockData(stock_file, 1)
 
         excel_file = GetTemplate("GBH")
         excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
         excel_file = WriteGBHFileMainData(excel_file, express_data, stock_data)
+        
         DownloadFile(excel_file)
 
 def DH():
@@ -109,11 +111,12 @@ def DH():
         start_date, end_date = GetUserInputDates()
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file, 0)
+        stock_data = GetStockData(stock_file, 4)
 
         excel_file = GetTemplate("DH")
-        # excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
-        excel_file = WriteGBHFileMainData(excel_file, express_data, stock_data)
+        excel_file = WriteDHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
+        excel_file = WriteDHFileMainData(excel_file, express_data, stock_data)
+        
         DownloadFile(excel_file)
 
 def HP():
@@ -125,11 +128,12 @@ def HP():
         start_date, end_date = GetUserInputDates()
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file, 0)
+        stock_data = GetStockData(stock_file, 5)
 
         excel_file = GetTemplate("HP")
-        # excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
-        excel_file = WriteGBHFileMainData(excel_file, express_data, stock_data)
+        excel_file = WriteHPFileInformation(excel_file, start_date, end_date, bill_numbers, total)
+        excel_file = WriteHPFileMainData(excel_file, express_data, stock_data)
+        
         DownloadFile(excel_file)
 
 # endregion
@@ -482,13 +486,46 @@ def WriteGBHFileMainData(excel_file, express_data, stock_data):
     return WriteExcelMainData(excel_file, express_data, stock_data)
 
 def WriteDHFileInformation(excel_file, start_date, end_date, bill_number, total):
-    pass
+    wb = load_workbook(excel_file)
+    ws = wb.active
+
+    ws["I1"].value = ws["I1"].value.replace("?", start_date.replace(".", "/"))
+    ws["A2"].value = start_date
+    ws["E2"].value = end_date
+
+    ws["A3"].value = ws["A3"].value.replace("?", str(total))
+    ws["E3"].value = ws["E3"].value.replace("?", str(len(bill_number)))
+
+    bill_number_range = FindBillNumberRange(bill_number)
+    ws["A4"].value = ws["A4"].value.replace("?", bill_number_range)
+
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    return excel_file
 
 def WriteDHFileMainData(excel_file, express_data, stock_data):
     return WriteExcelMainData(excel_file, express_data, stock_data)
 
 def WriteHPFileInformation(excel_file, start_date, end_date, bill_number, total):
-    pass
+    wb = load_workbook(excel_file)
+    ws = wb.active
+
+    information = [start_date, end_date, str(total)]
+    for replacement in information:
+        ws["A1"].value = ws["A1"].value.replace("?", replacement, 1)
+
+    bill_number_range = FindBillNumberRange(bill_number)
+    ws["A2"].value = (
+        ws["A2"].value
+        .replace("?", bill_number_range, 1)
+        .replace("?", str(len(bill_number)), 1)
+    )
+
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    return excel_file
 
 def WriteHPFileMainData(excel_file, express_data, stock_data):
     return WriteExcelMainData(excel_file, express_data, stock_data)
@@ -507,6 +544,7 @@ def WriteExcelMainData(excel_file, express_data, stock_data):
     stock_lookup = {SafeInt(s[0]): s[1:] for s in stock_data if SafeInt(s[0])}
 
     column_styles = CaptureColumnStyles(ws, header_end_row+1)
+    sum = 0.0
 
     for idx, item in enumerate(express_data, start = 1):
         write_row = header_end_row + idx
@@ -523,6 +561,7 @@ def WriteExcelMainData(excel_file, express_data, stock_data):
 
         index_cell.value = idx
         amount_cell.value = item["sum_qty"]
+        sum += item["sum_qty"]
 
         barcode = item.get("barcode", "")
         if "_" in barcode:
@@ -540,7 +579,16 @@ def WriteExcelMainData(excel_file, express_data, stock_data):
             detail_cell.value = "Cannot find the barcode.\nUpdate the main sheet."
             detail_cell.fill = ERROR_HIGHLIGHT
 
-    AutoResizeColumn(ws, 3, end_row=GetLastRealRow(ws), padding=0, max_width=90)
+    cell = ws[f"E{GetLastRealRow(ws)+1}"]
+    cell.value = sum
+    cell.font = copy(cell.font) + Font(bold=True)
+    cell.fill = PatternFill(
+        fill_type="solid",
+        start_color="FFFF00",
+        end_color="FFFF00",
+    )
+
+    AutoResizeColumn(ws, 3, end_row=GetLastRealRow(ws)-1, padding=0, max_width=90)
 
     excel_file = BytesIO()
     wb.save(excel_file)
@@ -910,7 +958,6 @@ def ExcelUploadSection(choice):
 
 def GetUserInputTitle():
     st.subheader("Title")
-
     title = st.text_input(
         "Enter title:",
         key = "user_title",
@@ -923,9 +970,11 @@ def GetUserInputTitle():
 def GetUserInputDates():
     today = date.today()
 
+    st.subheader("Choose Date range")
     date_range = st.date_input(
         "Select date range",
-        value = (today, today)
+        value = (today, today),
+        label_visibility="collapsed"
     )
 
     if isinstance(date_range, tuple):
