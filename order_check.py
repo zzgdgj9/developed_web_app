@@ -72,7 +72,7 @@ def ThaiName():
     if express_file is not None and stock_file is not None:
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file)
+        stock_data = GetStockData(stock_file, 0)
 
         excel_file = GenerateExcel()
         excel_file = UpdateUserInputTitle(excel_file)
@@ -93,7 +93,7 @@ def GBH():
         start_date, end_date = GetUserInputDates()
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file)
+        stock_data = GetStockData(stock_file, 0)
 
         excel_file = GetTemplate("GBH")
         excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
@@ -109,7 +109,7 @@ def DH():
         start_date, end_date = GetUserInputDates()
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file)
+        stock_data = GetStockData(stock_file, 0)
 
         excel_file = GetTemplate("DH")
         # excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
@@ -125,7 +125,7 @@ def HP():
         start_date, end_date = GetUserInputDates()
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file)
+        stock_data = GetStockData(stock_file, 0)
 
         excel_file = GetTemplate("HP")
         # excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
@@ -484,14 +484,14 @@ def WriteGBHFileMainData(excel_file, express_data, stock_data):
 def WriteDHFileInformation(excel_file, start_date, end_date, bill_number, total):
     pass
 
-def WriteDHFileMainData(excel_file):
-    pass
+def WriteDHFileMainData(excel_file, express_data, stock_data):
+    return WriteExcelMainData(excel_file, express_data, stock_data)
 
 def WriteHPFileInformation(excel_file, start_date, end_date, bill_number, total):
     pass
 
-def WriteHPFileMainData(excel_file):
-    pass
+def WriteHPFileMainData(excel_file, express_data, stock_data):
+    return WriteExcelMainData(excel_file, express_data, stock_data)
 
 def WriteExcelMainData(excel_file, express_data, stock_data):
     excel_file.seek(0)
@@ -540,6 +540,8 @@ def WriteExcelMainData(excel_file, express_data, stock_data):
             detail_cell.value = "Cannot find the barcode.\nUpdate the main sheet."
             detail_cell.fill = ERROR_HIGHLIGHT
 
+    AutoResizeColumn(ws, 3, end_row=GetLastRealRow(ws), padding=0, max_width=90)
+
     excel_file = BytesIO()
     wb.save(excel_file)
     excel_file.seek(0)
@@ -568,6 +570,40 @@ def ApplyColumnStyleToCell(cell, style):
     cell.alignment = copy(style["alignment"])
     cell.protection = copy(style["protection"])
     cell.border = BORDER
+
+def AutoResizeColumn(ws, col, start_row=1, end_row=None, 
+                     padding=2, min_width=8, max_width=50):
+    if end_row is None:
+        end_row = ws.max_row
+
+    max_width_est = 0
+    merged_ranges = ws.merged_cells.ranges
+    col_letter = get_column_letter(col)
+
+    for row in range(start_row, end_row + 1):
+        coord = f"{col_letter}{row}"
+
+        skip = False
+        for merged in merged_ranges:
+            if coord in merged and not (row == merged.min_row and col == merged.min_col):
+                skip = True
+                break
+        if skip:
+            continue
+
+        cell = ws.cell(row=row, column=col)
+        if not cell.value:
+            continue
+
+        text = str(cell.value)
+        font_size = cell.font.sz or 11
+        scale = font_size / 11
+
+        est = int(len(text) * scale) + padding
+        max_width_est = max(max_width_est, est)
+
+    final_width = max(min_width, min(max_width_est, max_width))
+    ws.column_dimensions[col_letter].width = final_width
 
 #endregion
 
@@ -803,7 +839,7 @@ def SummariseByBarcode(data_rows):
 
     return list(summaries.values())
 
-def GetStockData(uploaded_file):
+def GetStockData(uploaded_file, sheet):
     """
     Given the uploaded stock Excel file, search the barcode that listed before through the file.
     (which is appear at the second column in the stock file)
@@ -820,7 +856,7 @@ def GetStockData(uploaded_file):
         pass
 
     wb = load_workbook(uploaded_file, data_only=True)
-    ws = wb.worksheets[0]  # or wb["SheetName"] if you want a specific sheet
+    ws = wb.worksheets[sheet]  # or wb["SheetName"] if you want a specific sheet
     max_row = ws.max_row
 
     data = []
