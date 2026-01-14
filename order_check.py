@@ -8,14 +8,20 @@ from io import BytesIO
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
 from collections import OrderedDict
+from copy import copy
 
 CENTER = Alignment(horizontal="center", vertical="center")
 
 BORDER = Border(
-    left=Side(style="thin"),
-    right=Side(style="thin"),
-    top=Side(style="thin"),
-    bottom=Side(style="thin"),
+    right = Side(style="thin"),
+    top = Side(style="thin"),
+    bottom = Side(style="thin"),
+)
+
+ERROR_HIGHLIGHT = PatternFill(
+    fill_type="solid",
+    start_color="FF4A0B",
+    end_color="FF4A0B",
 )
 
 def main():
@@ -86,18 +92,45 @@ def GBH():
     if express_file is not None and stock_file is not None:
         start_date, end_date = GetUserInputDates()
         express_data, bill_numbers, total = GetExpressData(express_file)
+        express_data = SummariseByBarcode(express_data)
+        stock_data = GetStockData(stock_file)
 
         excel_file = GetTemplate("GBH")
         excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
+        excel_file = WriteGBHFileMainData(excel_file, express_data, stock_data)
         DownloadFile(excel_file)
 
 def DH():
-    excel_file = GetTemplate("DH")
-    DownloadFile(excel_file)
+    ExcelUploadSection("DH")
+    express_file = st.session_state.get("excel_file_1")
+    stock_file = st.session_state.get("excel_file_2")
+
+    if express_file is not None and stock_file is not None:
+        start_date, end_date = GetUserInputDates()
+        express_data, bill_numbers, total = GetExpressData(express_file)
+        express_data = SummariseByBarcode(express_data)
+        stock_data = GetStockData(stock_file)
+
+        excel_file = GetTemplate("DH")
+        # excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
+        excel_file = WriteGBHFileMainData(excel_file, express_data, stock_data)
+        DownloadFile(excel_file)
 
 def HP():
-    excel_file = GetTemplate("HP")
-    DownloadFile(excel_file)
+    ExcelUploadSection("HP")
+    express_file = st.session_state.get("excel_file_1")
+    stock_file = st.session_state.get("excel_file_2")
+
+    if express_file is not None and stock_file is not None:
+        start_date, end_date = GetUserInputDates()
+        express_data, bill_numbers, total = GetExpressData(express_file)
+        express_data = SummariseByBarcode(express_data)
+        stock_data = GetStockData(stock_file)
+
+        excel_file = GetTemplate("HP")
+        # excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
+        excel_file = WriteGBHFileMainData(excel_file, express_data, stock_data)
+        DownloadFile(excel_file)
 
 # endregion
 
@@ -345,11 +378,7 @@ def WriteMainData(excel_file, express_data, stock_data):
             ws[f"B{excel_row}"].value = before
             ws[f"B{excel_row}"].alignment = CENTER
             ws[f"B{excel_row}"].font = Font(size=12)
-            ws[f"B{excel_row}"].fill = PatternFill(
-                fill_type="solid",
-                start_color="FF4A0B",
-                end_color="FF4A0B",
-            )
+            ws[f"B{excel_row}"].fill = ERROR_HIGHLIGHT
 
             ws[f"C{excel_row}"] = after
             ws[f"C{excel_row}"].alignment = CENTER
@@ -382,11 +411,7 @@ def WriteMainData(excel_file, express_data, stock_data):
             ws[f"C{excel_row}"].value = "Cannot find the barcode.\nUpdate the main sheet of the stock file."
             ws[f"C{excel_row}"].alignment = CENTER
             ws[f"C{excel_row}"].font = Font(size=12)
-            ws[f"C{excel_row}"].fill = PatternFill(
-                fill_type="solid",
-                start_color="FF4A0B",
-                end_color="FF4A0B",
-            )
+            ws[f"C{excel_row}"].fill = ERROR_HIGHLIGHT
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -452,6 +477,97 @@ def WriteGBHFileInformation(excel_file, start_date, end_date, bill_number, total
     wb.save(excel_file)
     excel_file.seek(0)
     return excel_file
+
+def WriteGBHFileMainData(excel_file, express_data, stock_data):
+    return WriteExcelMainData(excel_file, express_data, stock_data)
+
+def WriteDHFileInformation(excel_file, start_date, end_date, bill_number, total):
+    pass
+
+def WriteDHFileMainData(excel_file):
+    pass
+
+def WriteHPFileInformation(excel_file, start_date, end_date, bill_number, total):
+    pass
+
+def WriteHPFileMainData(excel_file):
+    pass
+
+def WriteExcelMainData(excel_file, express_data, stock_data):
+    excel_file.seek(0)
+    wb = load_workbook(excel_file)
+    ws = wb.active
+
+    header_end_row = GetLastRealRow(ws)
+    stock_col =  8 if any(
+        isinstance(ws.cell(row=header_end_row, column=col).value, str)
+        and "stock" in ws.cell(row=header_end_row, column=col).value.lower()
+        for col in range(1, ws.max_column + 1)
+    ) else 7
+    stock_lookup = {SafeInt(s[0]): s[1:] for s in stock_data if SafeInt(s[0])}
+
+    column_styles = CaptureColumnStyles(ws, header_end_row+1)
+
+    for idx, item in enumerate(express_data, start = 1):
+        write_row = header_end_row + idx
+
+        index_cell = ws.cell(row=write_row, column = 1)
+        barcode_cell = ws.cell(row=write_row, column=2)
+        detail_cell = ws.cell(row=write_row, column=3)
+        cell_d = ws.cell(row=write_row, column=4)
+        amount_cell = ws.cell(row=write_row, column=5)
+        stock_cell = ws.cell(row=write_row, column=stock_col)
+
+        for col, style in column_styles.items():
+            ApplyColumnStyleToCell(ws.cell(write_row, col), style)
+
+        index_cell.value = idx
+        amount_cell.value = item["sum_qty"]
+
+        barcode = item.get("barcode", "")
+        if "_" in barcode:
+            barcode_cell.value, detail_cell.value = barcode.split("_", 1)
+            barcode_cell.fill = ERROR_HIGHLIGHT
+            continue
+
+        barcode_cell.value = barcode
+        stock_item = stock_lookup.pop(SafeInt(barcode), None)
+
+        if stock_item:
+            detail_cell.value = stock_item[0]
+            stock_cell.value = stock_item[1]
+        else:
+            detail_cell.value = "Cannot find the barcode.\nUpdate the main sheet."
+            detail_cell.fill = ERROR_HIGHLIGHT
+
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    return excel_file
+
+def CaptureColumnStyles(ws, style_row):
+    styles = {}
+    max_column = GetLastRealCol(ws)
+    for col in range(1, max_column + 1):
+        cell = ws.cell(row=style_row, column=col)
+        styles[col] = {
+            "font": copy(cell.font),
+            "border": copy(cell.border),
+            "fill": copy(cell.fill),
+            "number_format": cell.number_format,
+            "alignment": copy(cell.alignment),
+            "protection": copy(cell.protection),
+        }
+    return styles
+
+def ApplyColumnStyleToCell(cell, style):
+    cell.font = copy(style["font"])
+    cell.border = copy(style["border"])
+    cell.fill = copy(style["fill"])
+    cell.number_format = style["number_format"]
+    cell.alignment = copy(style["alignment"])
+    cell.protection = copy(style["protection"])
+    cell.border = BORDER
 
 #endregion
 
@@ -852,6 +968,18 @@ def GetTemplate(file_choice):
     wb.save(output)
     output.seek(0)
     return output
+
+def GetLastRealRow(ws, col=1):
+    row = ws.max_row
+    while row > 0 and ws.cell(row=row, column=col).value is None:
+        row -= 1
+    return row
+
+def GetLastRealCol(ws):
+    col = ws.max_column
+    while col > 0 and ws.cell(row=GetLastRealRow(ws), column=col).value is None:
+        col -= 1
+    return col
 
 # endregion
 
