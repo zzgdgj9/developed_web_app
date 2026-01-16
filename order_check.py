@@ -36,37 +36,12 @@ def main():
              Do not need to refresh the page.
             """)
 
-    st.subheader("กรุณาเลือกลูกค้า")
-    choice = st.radio(
-        "กรุณาเลือกลูกค้า",
-        ["ร้านย่อย", "GBH", "DH", "HP"],
-        index=None,  # nothing selected initially
-        horizontal=True,
-        label_visibility="collapsed"
-    )
-
-    if "prev_choice" not in st.session_state:
-        st.session_state.prev_choice = choice
-
-    if choice is not None and choice != st.session_state.prev_choice:
-        st.session_state.clear()
-        st.session_state.prev_choice = choice
-        st.session_state["toggle_button"] = False
-        st.rerun()
-
-    if choice == "ร้านย่อย":
-        ThaiName()
-    elif choice == "GBH":
-        GBH()
-    elif choice == "DH":
-        DH()
-    elif choice == "HP":
-        HP()
+    ExcelUploadSection()
+    GetUserCompanyChoice()
 
 # region --- Entrance function for different companies with specific programme logic ---
 
 def ThaiName():
-    ExcelUploadSection("Thai")
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
 
@@ -86,7 +61,6 @@ def ThaiName():
         DownloadFile(excel_file)
 
 def GBH():
-    ExcelUploadSection("GBH")
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
 
@@ -103,7 +77,6 @@ def GBH():
         DownloadFile(excel_file)
 
 def DH():
-    ExcelUploadSection("DH")
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
 
@@ -120,7 +93,6 @@ def DH():
         DownloadFile(excel_file)
 
 def HP():
-    ExcelUploadSection("HP")
     express_file = st.session_state.get("excel_file_1")
     stock_file = st.session_state.get("excel_file_2")
 
@@ -442,12 +414,14 @@ def GetTemplate(file_choice):
     if len(template["sheets"]) == 1:
         sheet_choice = template["sheets"][0]
     else:
+        st.subheader("Select sheet")
         sheet_choice = st.radio(
-            "Select mode",
+            "Select sheet",
             template["sheets"],
-            index=0,
-            horizontal=True,
-            key=f"{file_choice}_sheet_choice"
+            index = 0,
+            horizontal = True,
+            key = f"{file_choice}_sheet_choice",
+            label_visibility = "collapsed"
         )
 
     if not sheet_choice:
@@ -477,7 +451,6 @@ def WriteGBHFileMainData(wb, express_data, stock_data):
     return WriteExcelMainData(wb, express_data, stock_data)
 
 def WriteDHFileInformation(wb, start_date, end_date, bill_number, total):
-    # wb = load_workbook(excel_file)
     ws = wb.active
 
     ws["I1"].value = ws["I1"].value.replace("?", start_date.replace(".", "/"))
@@ -690,7 +663,7 @@ def GetExpressData(uploaded_file):
             for c in range(1, max_col + 1)
         ]
 
-        # Optionally skip completely empty rows
+        # Optionally skip completely empty rows or integer row
         if all(v in (None, "") for v in row_values) \
             or all(type(v) in (int, float) for v in row_values):
                 continue
@@ -817,7 +790,6 @@ def ExtractPackQtyFromRow(row):
     found = False
     for cell in row:
         if isinstance(cell, str) and any(suffix in cell for suffix in suffixes):
-            found = True
             # Find the first matching suffix
             for suffix in suffixes:
                 if suffix in cell:
@@ -828,11 +800,8 @@ def ExtractPackQtyFromRow(row):
             if not before:
                 continue
 
-            # try:
-            #     qty += float(before)
-            # except ValueError:
-            #     continue
             qty += float(before)
+            found = True
 
     if not found:
         raise ValueError("Self Defined Error 10010: No valid suffix found in this row!")  # raise Python exception
@@ -912,7 +881,7 @@ def GetStockData(uploaded_file, sheet):
 
 # region --- General user interface functions ---
 
-def ExcelUploadSection(choice):
+def ExcelUploadSection():
     """
     Show an interface that lets the user upload two Excel files.
     The uploaded files are stored in:
@@ -926,13 +895,13 @@ def ExcelUploadSection(choice):
     file1 = st.file_uploader(
         "Upload the Excel file from Express Accounting.",
         type=["xlsx", "xlsm", "xls"],
-        key=f"excel_upload_1_{choice}",
+        key=f"excel_upload_1",
     )
 
     file2 = st.file_uploader(
         "Upload the product stock file",
         type=["xlsx", "xlsm", "xls"],
-        key=f"excel_upload_2_{choice}",
+        key=f"excel_upload_2",
     )
 
     # Store them in session_state so other blocks can use them
@@ -941,6 +910,39 @@ def ExcelUploadSection(choice):
 
     if file2 is not None:
         st.session_state["excel_file_2"] = file2
+
+def GetUserCompanyChoice():
+    st.subheader("กรุณาเลือกลูกค้า")
+    choice = st.radio(
+        "กรุณาเลือกลูกค้า",
+        ["ร้านย่อย", "GBH", "DH", "HP"],
+        index=None,  # nothing selected initially
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
+    if "prev_choice" not in st.session_state:
+        st.session_state.prev_choice = choice
+
+    if choice is not None and choice != st.session_state.prev_choice:
+        keep_keys = {"excel_file_1", "excel_file_2", "prev_choice"}
+        
+        for key in list(st.session_state.keys()):
+            if key not in keep_keys:
+                del st.session_state[key]
+
+        st.session_state.prev_choice = choice
+        st.session_state["toggle_button"] = False
+        st.rerun()
+
+    if choice == "ร้านย่อย":
+        ThaiName()
+    elif choice == "GBH":
+        GBH()
+    elif choice == "DH":
+        DH()
+    elif choice == "HP":
+        HP()
 
 def GetUserInputTitle():
     st.subheader("Title")
