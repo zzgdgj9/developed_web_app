@@ -181,7 +181,7 @@ def GenerateExcel():
     ws["A4"] = "Row 4: A-D merged"
 
     ws.merge_cells("E4:G4")
-    ws["E4"] = "Row 4: E-G merged"\
+    ws["E4"] = "Row 4: E-G merged"
 
     ws["A5"] = "NO."
     ws["B5"] = "บาร์โค้ด"
@@ -198,25 +198,18 @@ def GenerateExcel():
 
     ws.freeze_panes = "A6"
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    return wb
 
-def UpdateUserInputTitle(excel_file):
+def UpdateUserInputTitle(wb):
     """
     Shows a text box. Whatever the user types is stored automatically
     (no save button) and returned exactly as entered.
     """
 
-    excel_file.seek(0)
-    wb = load_workbook(excel_file)
     ws = wb.active
 
-    GetUserInputTitle()
-
     # Always store the latest raw text
-    ws["A1"] = st.session_state.get("user_title", "")
+    ws["A1"].value = GetUserInputTitle()
     ws["A1"].font = Font(size=32, color="6600CC")
     ws["A1"].fill = PatternFill(
         fill_type="solid",
@@ -224,12 +217,9 @@ def UpdateUserInputTitle(excel_file):
         end_color="FFAAFF",
     )
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    return wb
 
-def GetDateTime(excel_file):
+def GetDateTime(wb):
     """
     Show date & time inputs for the Excel file.
     - Defaults to current date & time on first run
@@ -238,9 +228,6 @@ def GetDateTime(excel_file):
     - No need to return anything; you can read from session_state later.
     """
     st.subheader("Date & Time")
-
-    excel_file.seek(0)
-    wb = load_workbook(excel_file)
     ws = wb.active
 
     now = datetime.now(ZoneInfo("Asia/Bangkok"))
@@ -273,20 +260,14 @@ def GetDateTime(excel_file):
         end_color="FCE4D6",
     )
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    return wb
 
-def GetBranchNumberAndVersion(excel_file):
+def GetBranchNumberAndVersion(wb):
     """
     Get the branch number and the version of the file 
     from user input and put in the excel
     """
     st.subheader("Branch Number & Version")
-
-    excel_file.seek(0)
-    wb = load_workbook(excel_file)
     ws = wb.active
 
     st.text_input(
@@ -318,14 +299,9 @@ def GetBranchNumberAndVersion(excel_file):
     )
     #97DCFF
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    return wb
 
-def UpdateBillNumberAndTotalProfit(excel_file, bill_numbers, total):
-    excel_file.seek(0)
-    wb = load_workbook(excel_file)
+def UpdateBillNumberAndTotalProfit(wb, bill_numbers, total):
     ws = wb.active
 
     ws["B2"] = bill_numbers[0] + " – " + bill_numbers[-1]
@@ -352,24 +328,22 @@ def UpdateBillNumberAndTotalProfit(excel_file, bill_numbers, total):
         end_color="E2EFDA",
     )
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    return wb
 
-def WriteMainData(excel_file, express_data, stock_data):
-    excel_file.seek(0)
-    wb = load_workbook(excel_file)
+def WriteMainData(wb, express_data, stock_data):
     ws = wb.active
 
-    number = 0
-    for row, item in enumerate(express_data):
-        end = len(stock_data)
-        excel_row = row + 6
-        number += 1
+    stock_lookup = {
+        SafeInt(row[0]): row[1:]
+        for row in stock_data
+        if SafeInt(row[0]) is not None
+    }
+
+    for idx, item in enumerate(express_data, start=1):
+        excel_row = idx + 5
 
         cell = ws[f"A{excel_row}"]
-        cell.value = number
+        cell.value = idx
         cell.alignment = CENTER
         cell.font = Font(size=12)
 
@@ -393,38 +367,28 @@ def WriteMainData(excel_file, express_data, stock_data):
         ws[f"B{excel_row}"].alignment = CENTER
         ws[f"B{excel_row}"].font = Font(size=12)
 
-        found = False
-        for search in range (0, end):
-            barcode_bill = SafeInt(item.get("barcode"))
-            barcode_stock = SafeInt(stock_data[search][0])
+        barcode = SafeInt(item.get("barcode"))
+        stock_item = stock_lookup.pop(barcode, None)
 
-            if barcode_bill is not None and barcode_stock is not None:
-                if (barcode_bill == barcode_stock):
-                    ws[f"C{excel_row}"].value = stock_data[search][1]
-                    ws[f"C{excel_row}"].alignment = CENTER
-                    ws[f"C{excel_row}"].font = Font(size=12)
-                    
-                    ws[f"E{excel_row}"].value = stock_data[search][2]
-                    ws[f"E{excel_row}"].alignment = CENTER
-                    ws[f"E{excel_row}"].font = Font(size=12)
-                    del stock_data[search]
-                    found = True
-                    break
+        if stock_item is not None:
+            ws[f"C{excel_row}"].value = stock_item[0]
+            ws[f"C{excel_row}"].alignment = CENTER
+            ws[f"C{excel_row}"].font = Font(size=12)
 
-        if not found:
-            ws[f"C{excel_row}"].value = "Cannot find the barcode.\nUpdate the main sheet of the stock file."
+            ws[f"E{excel_row}"].value = stock_item[1]
+            ws[f"E{excel_row}"].alignment = CENTER
+            ws[f"E{excel_row}"].font = Font(size=12)
+        else:
+            ws[f"C{excel_row}"].value = (
+                "Cannot find the barcode.\nUpdate the main sheet of the stock file."
+            )
             ws[f"C{excel_row}"].alignment = CENTER
             ws[f"C{excel_row}"].font = Font(size=12)
             ws[f"C{excel_row}"].fill = ERROR_HIGHLIGHT
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    return wb
 
-def AdjustExcelColWidthAndAddBorder(excel_file):
-    excel_file.seek(0)
-    wb = load_workbook(excel_file)
+def AdjustExcelColWidthAndAddBorder(wb):
     ws = wb.active
 
     # Choose the row and column want to autosize
@@ -456,10 +420,7 @@ def AdjustExcelColWidthAndAddBorder(excel_file):
         padding = 6 if col != 1 else 3
         ws.column_dimensions[col_letter].width = min(max_len + padding, 60)
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    return wb
 
 #endregion
 
@@ -484,6 +445,7 @@ def GetTemplate(file_choice):
         sheet_choice = st.radio(
             "Select mode",
             template["sheets"],
+            index=0,
             horizontal=True,
             key=f"{file_choice}_sheet_choice"
         )
@@ -494,14 +456,11 @@ def GetTemplate(file_choice):
     for ws in wb.worksheets[:]:
             if ws.title != sheet_choice:
                 wb.remove(ws)
-                
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output
 
-def WriteGBHFileInformation(excel_file, start_date, end_date, bill_number, total):
-    wb = load_workbook(excel_file)
+    wb.active = 0
+    return wb
+
+def WriteGBHFileInformation(wb, start_date, end_date, bill_number, total):
     ws = wb.active
 
     ws["F2"].value = start_date
@@ -512,16 +471,13 @@ def WriteGBHFileInformation(excel_file, start_date, end_date, bill_number, total
     for replacement in information:
         ws["A3"].value = ws["A3"].value.replace("?", replacement, 1)
 
-    excel_file = BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
-    return excel_file
+    return wb
 
-def WriteGBHFileMainData(excel_file, express_data, stock_data):
-    return WriteExcelMainData(excel_file, express_data, stock_data)
+def WriteGBHFileMainData(wb, express_data, stock_data):
+    return WriteExcelMainData(wb, express_data, stock_data)
 
-def WriteDHFileInformation(excel_file, start_date, end_date, bill_number, total):
-    wb = load_workbook(excel_file)
+def WriteDHFileInformation(wb, start_date, end_date, bill_number, total):
+    # wb = load_workbook(excel_file)
     ws = wb.active
 
     ws["I1"].value = ws["I1"].value.replace("?", start_date.replace(".", "/"))
@@ -534,16 +490,12 @@ def WriteDHFileInformation(excel_file, start_date, end_date, bill_number, total)
     bill_number_range = FindBillNumberRange(bill_number)
     ws["A4"].value = ws["A4"].value.replace("?", bill_number_range)
 
-    excel_file = BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
-    return excel_file
+    return wb
 
-def WriteDHFileMainData(excel_file, express_data, stock_data):
-    return WriteExcelMainData(excel_file, express_data, stock_data)
+def WriteDHFileMainData(wb, express_data, stock_data):
+    return WriteExcelMainData(wb, express_data, stock_data)
 
-def WriteHPFileInformation(excel_file, start_date, end_date, bill_number, total):
-    wb = load_workbook(excel_file)
+def WriteHPFileInformation(wb, start_date, end_date, bill_number, total):
     ws = wb.active
 
     information = [start_date, end_date, str(total)]
@@ -557,17 +509,12 @@ def WriteHPFileInformation(excel_file, start_date, end_date, bill_number, total)
         .replace("?", str(len(bill_number)), 1)
     )
 
-    excel_file = BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
-    return excel_file
+    return wb
 
-def WriteHPFileMainData(excel_file, express_data, stock_data):
-    return WriteExcelMainData(excel_file, express_data, stock_data)
+def WriteHPFileMainData(wb, express_data, stock_data):
+    return WriteExcelMainData(wb, express_data, stock_data)
 
-def WriteExcelMainData(excel_file, express_data, stock_data):
-    excel_file.seek(0)
-    wb = load_workbook(excel_file)
+def WriteExcelMainData(wb, express_data, stock_data):
     ws = wb.active
 
     header_end_row = GetLastRealRow(ws)
@@ -607,7 +554,7 @@ def WriteExcelMainData(excel_file, express_data, stock_data):
         barcode_cell.value = barcode
         stock_item = stock_lookup.pop(SafeInt(barcode), None)
 
-        if stock_item:
+        if stock_item is not None:
             detail_cell.value = stock_item[0]
             stock_cell.value = stock_item[1]
         else:
@@ -616,7 +563,7 @@ def WriteExcelMainData(excel_file, express_data, stock_data):
 
     cell = ws[f"E{GetLastRealRow(ws)+1}"]
     cell.value = sum
-    cell.font = copy(cell.font) + Font(bold=True)
+    cell.font = copy(ws[f"E{GetLastRealRow(ws)}"].font) + Font(bold=True)
     cell.fill = PatternFill(
         fill_type="solid",
         start_color="FFFF00",
@@ -625,10 +572,7 @@ def WriteExcelMainData(excel_file, express_data, stock_data):
 
     AutoResizeColumn(ws, 3, end_row=GetLastRealRow(ws)-1, padding=0, max_width=90)
 
-    excel_file = BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
-    return excel_file
+    return wb
 
 def CaptureColumnStyles(ws, style_row):
     styles = {}
@@ -734,7 +678,7 @@ def GetExpressData(uploaded_file):
 
     # Need at least 2 separator rows
     if len(separator_rows) < 2:
-        return []  # nothing to return, can't find second horizontal line
+        raise ValueError("Invalid Express File Format: missing seperators (second horizontal line)")
 
     second_sep_row = separator_rows[1]
     start_row = second_sep_row + 1
@@ -747,8 +691,9 @@ def GetExpressData(uploaded_file):
         ]
 
         # Optionally skip completely empty rows
-        if all(v in (None, "") for v in row_values):
-            continue
+        if all(v in (None, "") for v in row_values) \
+            or all(type(v) in (int, float) for v in row_values):
+                continue
 
         split_row = row_values[0].split()
         data.append(split_row)
@@ -1033,7 +978,7 @@ def GetUserInputDates():
     end_date = f"{end_date.strftime('%d.%m')}.{end_date.year + 543}"
     return start_date, end_date
 
-def DownloadFile(excel_file):
+def DownloadFile(wb):
     st.subheader("Download the Excel file")
 
     agree = st.toggle(
@@ -1042,9 +987,13 @@ def DownloadFile(excel_file):
         value=False
     )
 
+    output_excel_file = BytesIO()
+    wb.save(output_excel_file)
+    output_excel_file.seek(0)
+
     st.download_button(
         label="⬇️ Download Excel File",
-        data=excel_file,
+        data=output_excel_file,
         file_name="output.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         disabled = not agree,
