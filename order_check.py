@@ -465,6 +465,41 @@ def AdjustExcelColWidthAndAddBorder(excel_file):
 
 # region --- Excel generation helper functions for other companies ---
 
+def GetTemplate(file_choice):
+    templates = {
+        "GBH": {"path": "template file/GBH.xlsx", "sheets": ["AS", "GL"]},
+        "DH": {"path": "template file/DH.xlsx", "sheets": ["GL", "MR"]},
+        "HP": {"path": "template file/HP.xlsx", "sheets": ["HP"]}
+    }
+
+    if file_choice not in templates:
+        return None
+
+    template = templates[file_choice]
+    wb = load_workbook(template["path"])
+
+    if len(template["sheets"]) == 1:
+        sheet_choice = template["sheets"][0]
+    else:
+        sheet_choice = st.radio(
+            "Select mode",
+            template["sheets"],
+            horizontal=True,
+            key=f"{file_choice}_sheet_choice"
+        )
+
+    if not sheet_choice:
+            return None
+        
+    for ws in wb.worksheets[:]:
+            if ws.title != sheet_choice:
+                wb.remove(ws)
+                
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
 def WriteGBHFileInformation(excel_file, start_date, end_date, bill_number, total):
     wb = load_workbook(excel_file)
     ws = wb.active
@@ -750,7 +785,7 @@ def TreatExpressData(data):
             row.insert(3, third)
 
     while (index < len(data) and data[index][0] != "รวมทั้งสิ้น"):
-        if len(data[index]) < 5:
+        if len(data[index]) < 5 or has_thai(data[index][0]):
             del data[index]
             continue
         
@@ -827,9 +862,14 @@ def ExtractPackQtyFromRow(row):
     If nothing found or parse fails, returns 0.
     """
     qty = 0.0
-    suffixes = (".แพ็ค", ".อัน", ".ชุด")
-    found = False
+    suffixes = (
+        ".แพ็ค", ".ชิ้น", ".อัน", ".ชุด", ".แผ่น",
+        ".กล่อง", ".ถุง", ".ม้วน", ".ลัง", ".แผง", ".คู่",
+        ".เครื่อง", ".ขวด", ".กระป๋อง", ".เส้น", ".ตัว", ".ใบ",
+        ".เมตร", ".ลูก", ".โหล", ".ดวง"
+    )
 
+    found = False
     for cell in row:
         if isinstance(cell, str) and any(suffix in cell for suffix in suffixes):
             found = True
@@ -843,13 +883,14 @@ def ExtractPackQtyFromRow(row):
             if not before:
                 continue
 
-            try:
-                qty += float(before)
-            except ValueError:
-                continue
+            # try:
+            #     qty += float(before)
+            # except ValueError:
+            #     continue
+            qty += float(before)
 
     if not found:
-        raise ValueError("Self Defined Error 10010: No valid suffix (.แพ็ค, .อัน, .ชุด) found in this row!")  # raise Python exception
+        raise ValueError("Self Defined Error 10010: No valid suffix found in this row!")  # raise Python exception
 
     return qty
 
@@ -1019,41 +1060,6 @@ def SafeInt(x):
     except (ValueError, TypeError):
         return None
 
-def GetTemplate(file_choice):
-    templates = {
-        "GBH": {"path": "template file/GBH.xlsx", "sheets": ["AS", "GL"]},
-        "DH": {"path": "template file/DH.xlsx", "sheets": ["GL", "MR"]},
-        "HP": {"path": "template file/HP.xlsx", "sheets": ["HP"]}
-    }
-
-    if file_choice not in templates:
-        return None
-
-    template = templates[file_choice]
-    wb = load_workbook(template["path"])
-
-    if len(template["sheets"]) == 1:
-        sheet_choice = template["sheets"][0]
-    else:
-        sheet_choice = st.radio(
-            "Select mode",
-            template["sheets"],
-            horizontal=True,
-            key=f"{file_choice}_sheet_choice"
-        )
-
-    if not sheet_choice:
-            return None
-        
-    for ws in wb.worksheets[:]:
-            if ws.title != sheet_choice:
-                wb.remove(ws)
-                
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output
-
 def GetLastRealRow(ws, col=1):
     row = ws.max_row
     while row > 0 and ws.cell(row=row, column=col).value is None:
@@ -1065,6 +1071,13 @@ def GetLastRealCol(ws):
     while col > 0 and ws.cell(row=GetLastRealRow(ws), column=col).value is None:
         col -= 1
     return col
+
+def has_thai(value) -> bool:
+    if value is None:
+        return False
+
+    text = str(value)
+    return any('\u0E00' <= ch <= '\u0E7F' for ch in text)
 
 # endregion
 
