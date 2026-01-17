@@ -26,18 +26,33 @@ ERROR_HIGHLIGHT = PatternFill(
 
 def main():
     st.title("Sales & Stock Reconciliation Report Generator")
-    st.write("""
-             Upload the requriment files to the corresponding box and 
-             provide the information to generate the summary excel sheet.
+    
+    st.header("📘 Introduction")
+    with st.expander("Click to expand"):
+        st.write("""
+                Upload the requriment files to the corresponding box and 
+                provide the information to generate the summary excel sheet.
 
-             Please ensure all the uploaded file is in excel format.
-             
-             Try download the excel file again if first download is fail. 
-             Do not need to refresh the page.
-            """)
+                Please ensure all the uploaded file is in excel format.
+                
+                Try download the excel file again if first download is fail. 
+                Do not need to refresh the page.
+                """)
 
+    st.divider()
     ExcelUploadSection()
-    GetUserCompanyChoice()
+    choice = GetUserCompanyChoice()
+
+    company_pages = {
+        "ร้านย่อย": ThaiName,
+        "GBH": GBH,
+        "DH": DH,
+        "HP": HP,
+    }
+
+    if choice in company_pages:
+        st.divider()
+        company_pages[choice]()
 
 # region --- Entrance function for different companies with specific programme logic ---
 
@@ -65,8 +80,9 @@ def GBH():
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None and stock_file is not None:
-        excel_file, option = GetTemplate("GBH")
         start_date, end_date = GetUserInputDates()
+        excel_file, option = GetTemplate("GBH")
+    
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
         stock_data = GetStockData(stock_file, 1, option)
@@ -81,8 +97,8 @@ def DH():
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None and stock_file is not None:
-        excel_file, option = GetTemplate("DH")
         start_date, end_date = GetUserInputDates()
+        excel_file, option = GetTemplate("DH")
 
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
@@ -98,8 +114,8 @@ def HP():
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None and stock_file is not None:
-        excel_file, option = GetTemplate("HP")
         start_date, end_date = GetUserInputDates()
+        excel_file, option = GetTemplate("HP")
 
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
@@ -900,7 +916,7 @@ def GetStockData(uploaded_file, sheet, option=None):
             continue
         
         data.append(row_value)
-    st.write(data)
+
     return data
 
 #endregion
@@ -939,36 +955,29 @@ def ExcelUploadSection():
 
 def GetUserCompanyChoice():
     st.subheader("กรุณาเลือกลูกค้า")
-    choice = st.radio(
-        "กรุณาเลือกลูกค้า",
-        ["ร้านย่อย", "GBH", "DH", "HP"],
-        index=None,  # nothing selected initially
-        horizontal=True,
-        label_visibility="collapsed"
-    )
 
     if "prev_choice" not in st.session_state:
-        st.session_state.prev_choice = choice
+        st.session_state.prev_choice = None
 
-    if choice is not None and choice != st.session_state.prev_choice:
-        keep_keys = {"excel_file_1", "excel_file_2", "prev_choice"}
-        
-        for key in list(st.session_state.keys()):
-            if key not in keep_keys:
-                del st.session_state[key]
+    options = ["ร้านย่อย", "GBH", "DH", "HP"]
+    cols = st.columns(len(options))
 
-        st.session_state.prev_choice = choice
-        st.session_state["toggle_button"] = False
-        st.rerun()
+    for col, option in zip(cols, options):
+        is_selected = option == st.session_state.prev_choice
+        label = f"✅ {option}" if is_selected else option
 
-    if choice == "ร้านย่อย":
-        ThaiName()
-    elif choice == "GBH":
-        GBH()
-    elif choice == "DH":
-        DH()
-    elif choice == "HP":
-        HP()
+        if col.button(label, use_container_width=True):
+            if option != st.session_state.prev_choice:
+                keep_keys = {"excel_file_1", "excel_file_2", "prev_choice"}
+                for key in list(st.session_state.keys()):
+                    if key not in keep_keys:
+                        del st.session_state[key]
+
+                st.session_state.prev_choice = option
+                st.session_state.toggle_button = False
+                st.rerun()
+
+    return st.session_state.prev_choice
 
 def GetUserInputTitle():
     st.subheader("Title")
@@ -1007,6 +1016,7 @@ def GetUserInputDates():
     return start_date, end_date
 
 def DownloadFile(wb):
+    st.divider()
     st.subheader("Download the Excel file")
 
     agree = st.toggle(
