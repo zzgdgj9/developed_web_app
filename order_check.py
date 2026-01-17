@@ -65,12 +65,12 @@ def GBH():
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None and stock_file is not None:
+        excel_file, option = GetTemplate("GBH")
         start_date, end_date = GetUserInputDates()
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file, 1)
+        stock_data = GetStockData(stock_file, 1, option)
 
-        excel_file = GetTemplate("GBH")
         excel_file = WriteGBHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
         excel_file = WriteGBHFileMainData(excel_file, express_data, stock_data)
         
@@ -81,12 +81,13 @@ def DH():
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None and stock_file is not None:
+        excel_file, option = GetTemplate("DH")
         start_date, end_date = GetUserInputDates()
+
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file, 4)
+        stock_data = GetStockData(stock_file, 4, option)
 
-        excel_file = GetTemplate("DH")
         excel_file = WriteDHFileInformation(excel_file, start_date, end_date, bill_numbers, total)
         excel_file = WriteDHFileMainData(excel_file, express_data, stock_data)
         
@@ -97,12 +98,13 @@ def HP():
     stock_file = st.session_state.get("excel_file_2")
 
     if express_file is not None and stock_file is not None:
+        excel_file, option = GetTemplate("HP")
         start_date, end_date = GetUserInputDates()
+
         express_data, bill_numbers, total = GetExpressData(express_file)
         express_data = SummariseByBarcode(express_data)
-        stock_data = GetStockData(stock_file, 5)
+        stock_data = GetStockData(stock_file, 5, option)
 
-        excel_file = GetTemplate("HP")
         excel_file = WriteHPFileInformation(excel_file, start_date, end_date, bill_numbers, total)
         excel_file = WriteHPFileMainData(excel_file, express_data, stock_data)
         
@@ -432,7 +434,7 @@ def GetTemplate(file_choice):
                 wb.remove(ws)
 
     wb.active = 0
-    return wb
+    return wb, sheet_choice
 
 def WriteGBHFileInformation(wb, start_date, end_date, bill_number, total):
     ws = wb.active
@@ -496,7 +498,19 @@ def WriteExcelMainData(wb, express_data, stock_data):
         and "stock" in ws.cell(row=header_end_row, column=col).value.lower()
         for col in range(1, ws.max_column + 1)
     ) else 7
-    stock_lookup = {SafeInt(s[0]): s[1:] for s in stock_data if SafeInt(s[0])}
+    
+    stock_lookup = {}
+    for s in stock_data:
+        barcode = SafeInt(s[0])
+        if not barcode:
+            continue
+
+        # Always: (detail, info, stock)
+        stock_lookup[barcode] = (
+            s[1],
+            s[2] if len(s) >= 4 else None,
+            s[-1],
+        )
 
     column_styles = CaptureColumnStyles(ws, header_end_row+1)
     sum = 0.0
@@ -507,7 +521,7 @@ def WriteExcelMainData(wb, express_data, stock_data):
         index_cell = ws.cell(row=write_row, column = 1)
         barcode_cell = ws.cell(row=write_row, column=2)
         detail_cell = ws.cell(row=write_row, column=3)
-        cell_d = ws.cell(row=write_row, column=4)
+        addition_info_cell = ws.cell(row=write_row, column=4)
         amount_cell = ws.cell(row=write_row, column=5)
         stock_cell = ws.cell(row=write_row, column=stock_col)
 
@@ -528,8 +542,12 @@ def WriteExcelMainData(wb, express_data, stock_data):
         stock_item = stock_lookup.pop(SafeInt(barcode), None)
 
         if stock_item is not None:
-            detail_cell.value = stock_item[0]
-            stock_cell.value = stock_item[1]
+            detail, info, stock = stock_item
+            detail_cell.value = detail
+            stock_cell.value = stock
+
+            if info is not None:
+                addition_info_cell.value = info
         else:
             detail_cell.value = "Cannot find the barcode.\nUpdate the main sheet."
             detail_cell.fill = ERROR_HIGHLIGHT
@@ -842,7 +860,7 @@ def SummariseByBarcode(data_rows):
 
     return list(summaries.values())
 
-def GetStockData(uploaded_file, sheet):
+def GetStockData(uploaded_file, sheet, option=None):
     """
     Given the uploaded stock Excel file, search the barcode that listed before through the file.
     (which is appear at the second column in the stock file)
@@ -860,13 +878,21 @@ def GetStockData(uploaded_file, sheet):
 
     wb = load_workbook(uploaded_file, data_only=True)
     ws = wb.worksheets[sheet]  # or wb["SheetName"] if you want a specific sheet
+    
     max_row = ws.max_row
-
     data = []
+
+    if sheet != 0 and option == "MR":
+        data_cols = [2, 3, 5, 6]
+    elif sheet != 0 and option != "GL":
+        data_cols = [2, 3, 4, 6]
+    else:
+        data_cols = [2, 3, 6]
+
     for r in range (2, max_row+1):
         row_value = [
             ws.cell(row=r, column=c).value
-            for c in [2, 3, 6]
+            for c in data_cols
         ]
 
         # Optionally skip completely empty rows
@@ -874,7 +900,7 @@ def GetStockData(uploaded_file, sheet):
             continue
         
         data.append(row_value)
-
+    st.write(data)
     return data
 
 #endregion
