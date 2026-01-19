@@ -294,8 +294,9 @@ def GetBranchNumberAndVersion(wb):
 def UpdateBillNumberAndTotalProfit(wb, bill_numbers, total):
     ws = wb.active
 
-    ws["B2"] = bill_numbers[0] + " – " + bill_numbers[-1]
-    ws["B2"].font = Font(size=21, color="0000FF")
+    bill_number_range = FindBillNumberRange(bill_numbers)
+    ws["B2"] = bill_number_range
+    ws["B2"].font = Font(size=20, color="0000FF")
     ws["B2"].fill = PatternFill(
         fill_type="solid",
         start_color="E2EFDA",
