@@ -893,18 +893,19 @@ def GetStockData(uploaded_file, sheet, option=None):
         # Some file-like objects may not have seek; ignore if so
         pass
 
-    wb = load_workbook(uploaded_file, data_only=True)
-    ws = wb.worksheets[sheet]  # or wb["SheetName"] if you want a specific sheet
-    
-    max_row = ws.max_row
-    data = []
-
     if sheet != 0 and option == "MR":
-        data_cols = [2, 3, 5, 6]
+        data_cols = [2, 3, 4, 5]
     elif sheet != 0 and option != "GL":
         data_cols = [2, 3, 4, 6]
     else:
         data_cols = [2, 3, 6]
+        sheet = {1: 2, 4: 3}.get(sheet, sheet)
+
+    wb = load_workbook(uploaded_file, data_only=True)
+    ws = wb.worksheets[sheet]  # or wb["SheetName"] if you want a specific sheet
+
+    max_row = ws.max_row
+    data = []
 
     for r in range (2, max_row+1):
         row_value = [
